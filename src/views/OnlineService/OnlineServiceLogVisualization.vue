@@ -182,6 +182,7 @@
 
 <script lang="ts" setup>
 import { ref, reactive, onMounted, watch } from 'vue'
+import { format } from 'date-fns'
 import * as echarts from 'echarts'
 import request from "@/utils/request"
 import { useRoute } from "vue-router"
@@ -309,17 +310,31 @@ function getStatusClass(code: number | string): string {
   return 'status-unknown'
 }
 
+// function getBeforeOneDay(): void {
+//   let start = new Date()
+//   let end = new Date().toLocaleString().split('/').join('-')
+//   let sta = start.setTime(start.getTime() - 3600 * 1000 * 24)
+//   sta = new Date(sta).toLocaleString().split('/').join('-')
+//   defaultStart.value = sta
+//   defaultEnd.value = end
+//   timeValue1.value = [defaultStart.value, defaultEnd.value]
+//   timeValue2.value = [defaultStart.value, defaultEnd.value]
+//   timeValue3.value = [defaultStart.value, defaultEnd.value]
+//   console.log(timeValue1.value, 'beforeday')
+// }
+
+
 function getBeforeOneDay(): void {
-  let start = new Date()
-  let end = new Date().toLocaleString().split('/').join('-')
-  let sta = start.setTime(start.getTime() - 3600 * 1000 * 24)
-  sta = new Date(sta).toLocaleString().split('/').join('-')
-  defaultStart.value = sta
-  defaultEnd.value = end
+  const now = new Date()
+  const oneDayAgo = new Date(now.getTime() - 24 * 3600 * 1000)
+  
+  // 当 defaultStart/End 定义为 ref<string> 时
+  defaultStart.value = format(oneDayAgo, 'yyyy-MM-dd HH:mm:ss')
+  defaultEnd.value = format(now, 'yyyy-MM-dd HH:mm:ss')
+  
   timeValue1.value = [defaultStart.value, defaultEnd.value]
   timeValue2.value = [defaultStart.value, defaultEnd.value]
   timeValue3.value = [defaultStart.value, defaultEnd.value]
-  console.log(timeValue1.value, 'beforeday')
 }
 
 function changePageIndex(param: number): void {
