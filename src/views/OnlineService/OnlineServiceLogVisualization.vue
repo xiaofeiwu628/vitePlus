@@ -972,27 +972,6 @@ onMounted(() => {
     height: 300px;
   }
 }
-/* 表格容器样式优化 */
-.status-table {
-  flex: 1;
-  min-width: 300px;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  background-color: #ffffff;
-  border: 1px solid #dcdfe6;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 表格标题区域 */
-.table-header {
-  background:  #4c75a3;
-  color: white;
-  padding: 15px 20px;
-  border-top-left-radius: 8px;
-  border-top-right-radius: 8px;
-}
 
 .table-title {
   font-size: 16px;
@@ -1005,87 +984,160 @@ onMounted(() => {
   opacity: 0.85;
 }
 
-/* 表格样式增强 */
-.status-data-table {
-  width: 100%;
+
+/* 表格容器样式优化 */
+.status-table {
+  flex: 1;
+  min-width: 300px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background-color: #ffffff;
+  border: none; /* 移除外边框 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 表格标题区域 */
+.table-header {
+  background: #4c75a3;
+  color: white;
+  padding: 15px 20px;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
   margin-bottom: 0;
 }
 
-:deep(.status-data-table .el-table__header-wrapper) {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+/* 表格样式增强 */
+.status-data-table {
+  width: 100%;
+  margin: 0;
+  border: none;
 }
 
-:deep(.status-data-table.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
-  background: #f5f7fa;
+/* 去除表格所有边框 */
+:deep(.el-table) {
+  border: none !important;
 }
 
-:deep(.status-data-table .el-table__body tr:hover > td.el-table__cell) {
+:deep(.el-table--border) {
+  border: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+}
+
+:deep(.el-table--border .el-table__inner-wrapper) {
+  border: none !important;
+}
+
+:deep(.el-table__inner-wrapper) {
+  border: none !important;
+}
+
+:deep(.el-table__header-wrapper th.el-table__cell) {
+  background-color: #e8f0f9;
+  color: #4c75a3;
+  border-color: #e8f0f9; /* 与背景同色，消除边框 */
+  border-bottom: 1px solid #d0e0f2; /* 只保留底部边框 */
+}
+
+:deep(.el-table__header) {
+  border: none !important;
+}
+
+:deep(.el-table__body) {
+  border: none !important;
+}
+
+:deep(.el-table__cell) {
+  border-bottom: 1px solid #ebeef5 !important;
+  border-right: none !important;
+}
+
+:deep(.el-table__body tr:last-child td.el-table__cell) {
+  border-bottom: none !important; /* 移除最后一行底部边框 */
+}
+
+:deep(.el-table--border::after),
+:deep(.el-table--border::before),
+:deep(.el-table__border-left-patch) {
+  display: none !important;
+}
+
+:deep(.el-table__fixed-right::before),
+:deep(.el-table__fixed::before) {
+  display: none !important;
+}
+
+/* 斑马纹样式优化 */
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
+  background-color: #f5f7fa;
+}
+
+:deep(.el-table__body tr:hover > td.el-table__cell) {
   background-color: #edf2fc;
 }
 
-/* 状态码样式 */
-.status-success {
-  background-color: #f0f9eb;
-  color: #67c23a;
+/* 标题栏与表格间无缝连接 */
+:deep(.el-table__header-wrapper) {
+  margin-top: -1px;
+}
+
+/* 状态码样式优化 */
+.status-success,
+.status-redirect,
+.status-client-error,
+.status-server-error,
+.status-unknown {
   font-weight: 600;
   padding: 4px 8px;
   border-radius: 4px;
   display: inline-block;
   min-width: 60px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.status-success {
+  background-color: #f0f9eb;
+  color: #67c23a;
   border: 1px solid #e1f3d8;
 }
 
 .status-redirect {
   background-color: #f4f4f5;
   color: #909399;
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 4px;
-  display: inline-block;
-  min-width: 60px;
   border: 1px solid #e9e9eb;
 }
 
 .status-client-error {
   background-color: #fef0f0;
   color: #f56c6c;
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 4px;
-  display: inline-block;
-  min-width: 60px;
   border: 1px solid #fde2e2;
 }
 
 .status-server-error {
   background-color: #fef6ed;
   color: #e6a23c;
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 4px;
-  display: inline-block;
-  min-width: 60px;
   border: 1px solid #faecd8;
 }
 
 .status-unknown {
   background-color: #f4f4f5;
   color: #909399;
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 4px;
-  display: inline-block;
-  min-width: 60px;
   border: 1px solid #e9e9eb;
 }
 
-/* 请求数量样式 */
+/* 单元格内边距优化 */
+:deep(.el-table .cell) {
+  padding: 10px 8px;
+}
+
+/* 请求数量和平均值样式优化 */
 .request-count {
   font-weight: 600;
   color: #4c75a3;
 }
 
-/* 平均值样式 */
 .avg-value {
   font-weight: 600;
   color: #1a2942;
