@@ -56,9 +56,10 @@ const routes: Array<RouteRecordRaw> = [
   { path: '/register', name: 'Register', component: Register },
   // { path: '/test', name: 'Test', component: Test }
 ]
-
+// 创建路由实例
 const router = createRouter({
-  history: createWebHistory(process.env.BASE_URL),
+  // 使用环境变量
+  history: createWebHistory(import.meta.env.VITE_BASE_URL),
   routes
 })
 

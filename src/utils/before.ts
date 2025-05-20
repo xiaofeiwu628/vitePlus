@@ -1,11 +1,15 @@
+// import axios, { AxiosHeaders, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
+
+// // 配置全局的超时时长
+// // axios.defaults.timeout = 100000;
+// // 配置全局的基本URL
+// axios.defaults.baseURL = '/before';
+// axios.defaults.headers.common['Content-Type'] = 'application/json;charset=utf-8';
 import axios, { AxiosHeaders, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 
-// 配置全局的超时时长
-// axios.defaults.timeout = 100000;
-// 配置全局的基本URL
-axios.defaults.baseURL = '/before';
+// 使用环境变量作为基本URL
+axios.defaults.baseURL = import.meta.env.VITE_BEFORE_URL;
 axios.defaults.headers.common['Content-Type'] = 'application/json;charset=utf-8';
-
 // request 拦截器
 axios.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {

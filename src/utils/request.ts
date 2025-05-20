@@ -2,7 +2,8 @@ import axios, { AxiosRequestHeaders, AxiosResponse, InternalAxiosRequestConfig }
 import router from "@/router";
 
 const request = axios.create({
-  baseURL: "/api",
+  // 使用环境变量
+  baseURL: import.meta.env.VITE_API_BASE_URL,
   timeout: 300000,
 });
 
