@@ -180,531 +180,537 @@
   </div>
 </template>
 
-
-<script>
+<script lang="ts" setup>
+import { ref, reactive, onMounted, watch } from 'vue'
 import * as echarts from 'echarts'
-import request from "@/utils/request";
-import { useRoute } from "vue-router";
+import request from "@/utils/request"
+import { useRoute } from "vue-router"
 import { 
   ArrowRight, 
   TrendCharts, 
   Histogram, 
   PieChart,
   DataAnalysis
-} from "@element-plus/icons-vue";
+} from "@element-plus/icons-vue"
 
-export default {
-  name: "OnlineServiceLogVisualization",
-  data() {
-    
-    return {
-      defaultStart: '',
-      defaultEnd: '',
-      timeValue1: [],
-      timeValue2: '',
-      timeValue3: '',
-      tableHeaderStyle: {
-        background: 'linear-gradient(to right, #1a2942, #4c75a3)',
-        color: '#ffffff',
-        fontSize: '14px',
-        fontWeight: '600',
-        borderColor: '#1a2942',
-        textAlign: 'center',
-        padding: '12px 0',
-        height: '50px'
-      },
-      tableCellStyle: {
-        textAlign: 'center',
-        fontSize: '14px',
-        padding: '10px 0',
-        color: '#303133'
-      },
-      disabledDate: (time) => {
-        return time.getTime() > Date.now()
-      },
-      shortcuts: [
-        {
-          text: '近一天',
-          value: () => {
-            const end = new Date()
-            const start = new Date()
-            start.setTime(start.getTime() - 3600 * 1000 * 24)
-            return [start, end]
-          },
-        },
-        {
-          text: '近一周',
-          value: () => {
-            const end = new Date()
-            const start = new Date()
-            start.setTime(start.getTime() - 3600 * 1000 * 24 * 7)
-            return [start, end]
-          },
-        },
-        {
-          text: '近一个月',
-          value: () => {
-            const end = new Date()
-            const start = new Date()
-            start.setTime(start.getTime() - 3600 * 1000 * 24 * 30)
-            return [start, end]
-          },
-        },
-        {
-          text: '近三个月',
-          value: () => {
-            const end = new Date()
-            const start = new Date()
-            start.setTime(start.getTime() - 3600 * 1000 * 24 * 90)
-            return [start, end]
-          },
-        },
-      ],
-      pageIndex: 1,
-      ArrowRight,
-      TrendCharts,
-      Histogram,
-      PieChart,
-      DataAnalysis,
-      loading: true,
-      serviceId: '',
-      timeSpan: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-      timeUnitValue: '',
-      timeunitvalue: '小时',
-      timeUnit: ['小时', '天', '月'],
-      timeSpanNum: 1,//时间跨度大小
-      chartData: {//图表数据
-        graphType: 'LineChart',//图表类型
-        yData: [],//折线图与直方图y轴数据
-        xData: [],//直方图x轴数据
-        pieData: [],//饼图数据
-        tableData: [],//表格数据
-      },
-      middle: {},
-      tableHeaderStyle: {
-        background: '#F5F5F5',
-        height: '50px',
-        color: '#303133',
-        borderColor: '#E4E7ED',
-        'text-align': 'center',
-        fontWeight: '500'
-      },
-      tableCellStyle: {
-        borderColor: '#E4E7ED',
-        'text-align': 'center'
-      }
-    }
-    
-  },
-  watch: {
-    // 保留原有watch逻辑，完全不变...
-    timeunitvalue: {
-      deep: true,
-      handler(newValue, oldValue) {
-        if (newValue === '小时') {
-          this.timeUnitValue = 'HOUR'
-        } else if (newValue === '天') {
-          this.timeUnitValue = 'DAY'
-        } else if (newValue === '月') {
-          this.timeUnitValue = 'MONTH'
-        } else {
-          console.log('timeunitvalue error')
-        }
-        this.middle = {
-          service_id: this.serviceId,
-          time_unit: this.timeUnitValue,
-          start_time: this.timeValue1[0],
-          end_time: this.timeValue1[1]
-        }
-        this.loadServiceLogLineChart(this.middle)
-      }
-    },
-    timeSpanNum: {
-      deep: true,
-      handler(newValue, oldValue) {
-        this.middle = {
-          service_id: this.serviceId,
-          time_span_num: newValue,
-          start_time: this.timeValue2[0],
-          end_time: this.timeValue2[1]
-        }
-        console.log(this.middle, 'middle in watch')
-        if (this.pageIndex === 2) {
-          this.loadServiceLogHistogram(this.middle)
-          console.log('Histogram page in watch')
-        } else {
-          console.log('error')
-        }
-      }
-    },
-    pageIndex: {
-      deep: true,
-      handler(newValue, oldValue) {
-        this.getBeforeOneDay()
-        this.timeValue1 = [this.defaultStart, this.defaultEnd]
-        this.timeValue2 = [this.defaultStart, this.defaultEnd]
-        this.timeValue3 = [this.defaultStart, this.defaultEnd]
-        if (this.pageIndex === 1) {
-          this.changeGraphType('LineChart')
-          console.log('LineChart page in watch')
-        } else if (this.pageIndex === 2) {
-          this.changeGraphType('Histogram')
-          console.log('Histogram page in watch')
-        } else if (this.pageIndex === 3) {
-          this.changeGraphType('PieChart')
-          console.log('PieChart page in watch')
-        } else {
-          console.log('error')
-        }
-      }
-    },
-    timeValue1: {
-      deep: true,
-      handler(newvalue, oldvalue) {
-        console.log(this.timeValue1, 'timeValue1')
-        if (newvalue != null) {
-          if (this.pageIndex === 1) {
-            this.middle = {
-              service_id: this.serviceId,
-              time_unit: this.timeUnitValue,
-              start_time: this.timeValue1[0],
-              end_time: this.timeValue1[1]
-            }
-            this.loadServiceLogLineChart(this.middle)
-            console.log('LineChart timevalue1 in watch')
-          }
-        }
-      }
-    },
-    timeValue2: {
-      deep: true,
-      handler(newvalue, oldvalue) {
-        console.log(this.timeValue2, 'timeValue2')
-        if (newvalue != null) {
-          if (this.pageIndex === 2) {
-            this.middle = {
-              service_id: this.serviceId,
-              time_span_num: this.timeSpanNum,
-              start_time: this.timeValue2[0],
-              end_time: this.timeValue2[1]
-            }
-            this.loadServiceLogHistogram(this.middle)
-            console.log('Histogram timevalue2 in watch')
-          } 
-        }
-      }
-    },
-    timeValue3: {
-      deep: true,
-      handler(newvalue, oldvalue) {
-        console.log(this.timeValue3, 'timeValue3')
-        if (newvalue != null) {
-          if (this.pageIndex === 3) {
-            this.middle = {
-              service_id: this.serviceId,
-              start_time: this.timeValue3[0],
-              end_time: this.timeValue3[1]
-            }
-            this.loadServiceLogPieChart(this.middle)
-            console.log('PieChart timevalue3 in watch')
-          }
-        }
-      }
+// 定义接口
+interface ChartData {
+  graphType: string;
+  yData: number[];
+  xData: string[];
+  pieData: any[];
+  tableData: any[];
+}
+
+interface MiddleParams {
+  service_id?: string | string[];
+  time_unit?: string;
+  time_span_num?: number;
+  start_time?: string;
+  end_time?: string;
+}
+
+// 响应式状态
+const defaultStart = ref('')
+const defaultEnd = ref('')
+const timeValue1 = ref<string[]>([])
+const timeValue2 = ref<string[]>([])
+const timeValue3 = ref<string[]>([])
+const tableHeaderStyle = {
+  background: '#4c75a3',
+  color: '#ffffff',
+  fontSize: '14px',
+  fontWeight: '600',
+  borderColor: '#1a2942',
+  textAlign: 'center',
+  padding: '12px 0',
+  height: '50px'
+}
+const tableCellStyle = {
+  textAlign: 'center',
+  fontSize: '14px',
+  padding: '10px 0',
+  color: '#303133'
+}
+
+const disabledDate = (time: Date) => {
+  return time.getTime() > Date.now()
+}
+
+const shortcuts = [
+  {
+    text: '近一天',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 3600 * 1000 * 24)
+      return [start, end]
     },
   },
-  created() {
-    this.getBeforeOneDay()
-    const route = useRoute();
-    this.serviceId = route.query.serviceId;
-    this.middle = {
-      service_id: this.serviceId,
-      time_unit: this.timeUnitValue,
-      start_time: this.timeValue1[0],
-      end_time: this.timeValue1[1]
-    }
-    this.loadServiceLogLineChart(this.middle);
-    console.log(this.serviceId, this.timeValue1, 'serviceId in created')
+  {
+    text: '近一周',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 7)
+      return [start, end]
+    },
   },
-  methods: {
-        // 根据状态码返回对应的样式类
-    getStatusClass(code) {
-      if (!code) return 'status-unknown';
-      
-      code = code.toString();
-      if (code.startsWith('2')) return 'status-success';
-      if (code.startsWith('3')) return 'status-redirect';
-      if (code.startsWith('4')) return 'status-client-error';
-      if (code.startsWith('5')) return 'status-server-error';
-      
-      return 'status-unknown';
+  {
+    text: '近一个月',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 30)
+      return [start, end]
     },
-    // 保留原有方法逻辑，完全不变...
-    getBeforeOneDay() {
-      let start = new Date()
-      let end = new Date().toLocaleString().split('/').join('-')
-      let sta = start.setTime(start.getTime() - 3600 * 1000 * 24)
-      sta = new Date(sta).toLocaleString().split('/').join('-')
-      this.defaultStart = sta
-      this.defaultEnd = end
-      this.timeValue1 = [this.defaultStart, this.defaultEnd]
-      this.timeValue2 = [this.defaultStart, this.defaultEnd]
-      this.timeValue3 = [this.defaultStart, this.defaultEnd]
-      console.log(this.timeValue1, 'beforeday')
+  },
+  {
+    text: '近三个月',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 90)
+      return [start, end]
     },
-    changePageIndex(param) {
-      this.pageIndex = param;
-    },
-    loadServiceLogLineChart(param) {
-      this.loading = true;
-      request.get('/OnlineService/OnlineServiceLogVisualization/LineChart', {
-        params: param ? param : { service_id: this.serviceId }
-      }).then(res => {
-        this.chartData.xData = res.data.xData;
-        this.chartData.yData = res.data.yData;
-        console.log(res.data, 'res.data in LineChart');
-      })
-      setTimeout(() => {
-        this.initChart()//刷新图表
-      }, 1000)
-    },
-    loadServiceLogHistogram(param) {
-      this.loading = true;
-      request.get('/OnlineService/OnlineServiceLogVisualization/Histogram', {
-        params: param ? param : { service_id: this.serviceId }
-      }).then(res => {
-        this.chartData.xData = res.data.xData;
-        this.chartData.yData = res.data.yData;
-        console.log(res.data, 'res.data in Histogram');
-      })
-      setTimeout(() => {
-        this.initChart()//刷新图表
-      }, 1000)
-    },
-    loadServiceLogPieChart(param) {
-      this.loading = true;
-      request.get('/OnlineService/OnlineServiceLogVisualization/PieChart', {
-        params: param ? param : { service_id: this.serviceId }
-      }).then(res => {
-        this.chartData.pieData = res.data.pie_chart_data;
-        this.chartData.tableData = res.data.table_data;
-        console.log(res.data, 'res.data in PieChart');
-      })
-      setTimeout(() => {
-        this.initChart()//刷新图表
-      }, 1000)
-    },
-    changeGraphType(param) {
-      this.chartData.graphType = param;
-      this.timeunitvalue = "小时";
-      this.timeSpanNum = 1;
-      let middle;
-      if (param === 'LineChart') {
-        middle = {
-          service_id: this.serviceId,
-          time_unit: this.timeUnitValue,
-          start_time: this.timeValue1[0],
-          end_time: this.timeValue1[1]
-        };
-        this.loadServiceLogLineChart(middle)
-      } else if (param === 'Histogram') {
-        middle = {
-          service_id: this.serviceId,
-          time_span_num: this.timeSpanNum,
-          start_time: this.timeValue2[0],
-          end_time: this.timeValue2[1]
-        };
-        this.loadServiceLogHistogram(middle)
-      } else if (param === 'PieChart') {
-        middle = {
-          service_id: this.serviceId,
-          start_time: this.timeValue3[0],
-          end_time: this.timeValue3[1]
-        };
-        this.loadServiceLogPieChart(middle)
-      }
-    },
-    initChart() {
-      let option
-      if (this.chartData.graphType === 'LineChart') {//折线图
-        option = {
-          title: {
-            text: '请求数量时间趋势图',
-            left: 'center'
-          },
-          tooltip: {
-            trigger: 'item'
-          },
-          xAxis: {
-            type: 'category',
-            name: '时间',
-            nameTextStyle: {
-              fontWeight: "bold",
-              fontSize: 14
-            },
-            nameGap: 25,
-            boundaryGap: false,
-            data: this.chartData.xData.map(function (str) {
-              return str.replace(' ', '\n');
-            })
-          },
-          yAxis:
-              {
-                name: '请求数量/个',
-                nameLocation: 'middle',
-                nameTextStyle: {
-                  fontWeight: "bold",
-                  fontSize: 15,
-                  padding: [14, 14, 14, 14]
-                },
-                type: 'value',
-                minInterval: 1,
-                axisLine: {
-                  show: 'true',
-                  symbol: ['none', 'arrow'],
-                  symbolSize: [9, 15],
-                  symbolOffset: [0, 12],
-                  lineStyle: {
-                    type: 'solid'
-                  }
-                },
-              },
-          series: [
-            {
-              data: this.chartData.yData,
-              type: 'line',
-              lineStyle: {
-                color: '#4c75a3',
-                width: 3
-              },
-              itemStyle: {
-                color: '#1a2942'
-              },
-              areaStyle: {
-                color: {
-                  type: 'linear',
-                  x: 0,
-                  y: 0,
-                  x2: 0,
-                  y2: 1,
-                  colorStops: [{
-                    offset: 0, color: 'rgba(76, 117, 163, 0.3)'
-                  }, {
-                    offset: 1, color: 'rgba(76, 117, 163, 0.05)'
-                  }],
-                }
-              }
-            }
-          ]
-        };
-      } else if (this.chartData.graphType === 'Histogram') {//直方图
-        option = {
-          title: {
-            text: '请求数量时段分布图',
-            left: 'center'
-          },
-          tooltip: {
-            trigger: 'item'
-          },
-          xAxis: {
-            type: 'category',
-            name: '时间',
-            nameTextStyle: {
-              fontWeight: "bold",
-              fontSize: 14
-            },
-            nameGap: 25,
-            axisLabel: {interval: 0, rotate: 30},
-            data: this.chartData.xData
-          },
-          yAxis:
-              {
-                name: '请求数量/个',
-                nameLocation: 'middle',
-                nameTextStyle: {
-                  fontWeight: "bold",
-                  fontSize: 15,
-                  padding: [14, 14, 14, 14]
-                },
-                type: 'value',
-                minInterval: 1,
-                axisLine: {
-                  show: 'true',
-                  symbol: ['none', 'arrow'],
-                  symbolSize: [9, 15],
-                  symbolOffset: [0, 12],
-                  lineStyle: {
-                    type: 'solid'
-                  }
-                },
-              },
-          series: [
-            {
-              data: this.chartData.yData,
-              type: 'bar',
-              barWidth: '40%',
-              itemStyle: {
-                color: {
-                  type: 'linear',
-                  x: 0,
-                  y: 0,
-                  x2: 0,
-                  y2: 1,
-                  colorStops: [{
-                    offset: 0, color: '#1a2942'
-                  }, {
-                    offset: 1, color: '#4c75a3'
-                  }],
-                }
-              }
-            }
-          ]
-        };
-      } else if (this.chartData.graphType === 'PieChart') {//饼形图
-        option = {
-          title: {
-            text: '请求响应状态分布图',
-            left: 'center'
-          },
-          tooltip: {
-            trigger: 'item',
-            formatter: '{a} <br/>{b} : {c} ({d}%)'
-          },
-          legend: {
-            bottom: 10,
-            left: 'center'
-          },
-          series: [
-            {
-              name: '响应状态',
-              type: 'pie',
-              radius: '55%',
-              center: ['50%', '50%'],
-              data: this.chartData.pieData,
-              emphasis: {
-                itemStyle: {
-                  shadowBlur: 10,
-                  shadowOffsetX: 0,
-                  shadowColor: 'rgba(0, 0, 0, 0.5)'
-                }
-              },
-              labelLine: {
-                smooth: 0.2,
-                length: 10,
-                length2: 20
-              },
-              color: ['#4c75a3', '#1a2942', '#5e97d1', '#7ea3d7', '#a8c5e7', '#2c4b76']
-            }
-          ]
-        };
-      }
-      var myChart = echarts.init(this.$refs.myChart);
-      myChart.clear();
-      myChart.setOption(option)
-      this.loading = false;
-      console.log('作图完成')
+  },
+]
+
+const pageIndex = ref(1)
+const loading = ref(true)
+const serviceId = ref('')
+const timeSpan = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+const timeUnitValue = ref('')
+const timeunitvalue = ref('小时')
+const timeUnit = ['小时', '天', '月']
+const timeSpanNum = ref(1)
+
+const chartData = reactive<ChartData>({
+  graphType: 'LineChart',
+  yData: [],
+  xData: [],
+  pieData: [],
+  tableData: [],
+})
+
+const middle = reactive<MiddleParams>({})
+const myChart = ref<HTMLElement | null>(null)
+
+// 方法
+function getStatusClass(code: number | string): string {
+  if (!code) return 'status-unknown'
+  
+  const codeStr = code.toString()
+  if (codeStr.startsWith('2')) return 'status-success'
+  if (codeStr.startsWith('3')) return 'status-redirect'
+  if (codeStr.startsWith('4')) return 'status-client-error'
+  if (codeStr.startsWith('5')) return 'status-server-error'
+  
+  return 'status-unknown'
+}
+
+function getBeforeOneDay(): void {
+  let start = new Date()
+  let end = new Date().toLocaleString().split('/').join('-')
+  let sta = start.setTime(start.getTime() - 3600 * 1000 * 24)
+  sta = new Date(sta).toLocaleString().split('/').join('-')
+  defaultStart.value = sta
+  defaultEnd.value = end
+  timeValue1.value = [defaultStart.value, defaultEnd.value]
+  timeValue2.value = [defaultStart.value, defaultEnd.value]
+  timeValue3.value = [defaultStart.value, defaultEnd.value]
+  console.log(timeValue1.value, 'beforeday')
+}
+
+function changePageIndex(param: number): void {
+  pageIndex.value = param
+}
+
+function loadServiceLogLineChart(param?: MiddleParams): void {
+  loading.value = true
+  request.get('/OnlineService/OnlineServiceLogVisualization/LineChart', {
+    params: param ? param : { service_id: serviceId.value }
+  }).then(res => {
+    chartData.xData = res.data.xData
+    chartData.yData = res.data.yData
+    console.log(res.data, 'res.data in LineChart')
+  })
+  setTimeout(() => {
+    initChart() // 刷新图表
+  }, 1000)
+}
+
+function loadServiceLogHistogram(param?: MiddleParams): void {
+  loading.value = true
+  request.get('/OnlineService/OnlineServiceLogVisualization/Histogram', {
+    params: param ? param : { service_id: serviceId.value }
+  }).then(res => {
+    chartData.xData = res.data.xData
+    chartData.yData = res.data.yData
+    console.log(res.data, 'res.data in Histogram')
+  })
+  setTimeout(() => {
+    initChart() // 刷新图表
+  }, 1000)
+}
+
+function loadServiceLogPieChart(param?: MiddleParams): void {
+  loading.value = true
+  request.get('/OnlineService/OnlineServiceLogVisualization/PieChart', {
+    params: param ? param : { service_id: serviceId.value }
+  }).then(res => {
+    chartData.pieData = res.data.pie_chart_data
+    chartData.tableData = res.data.table_data
+    console.log(res.data, 'res.data in PieChart')
+  })
+  setTimeout(() => {
+    initChart() // 刷新图表
+  }, 1000)
+}
+
+function changeGraphType(param: string): void {
+  chartData.graphType = param
+  timeunitvalue.value = "小时"
+  timeSpanNum.value = 1
+  let localMiddle: MiddleParams = {}
+
+  if (param === 'LineChart') {
+    localMiddle = {
+      service_id: serviceId.value,
+      time_unit: timeUnitValue.value,
+      start_time: timeValue1.value[0],
+      end_time: timeValue1.value[1]
     }
+    loadServiceLogLineChart(localMiddle)
+  } else if (param === 'Histogram') {
+    localMiddle = {
+      service_id: serviceId.value,
+      time_span_num: timeSpanNum.value,
+      start_time: timeValue2.value[0],
+      end_time: timeValue2.value[1]
+    }
+    loadServiceLogHistogram(localMiddle)
+  } else if (param === 'PieChart') {
+    localMiddle = {
+      service_id: serviceId.value,
+      start_time: timeValue3.value[0],
+      end_time: timeValue3.value[1]
+    }
+    loadServiceLogPieChart(localMiddle)
   }
 }
+
+function initChart(): void {
+  let option: any
+  if (chartData.graphType === 'LineChart') {
+    option = {
+      title: {
+        text: '请求数量时间趋势图',
+        left: 'center'
+      },
+      tooltip: {
+        trigger: 'item'
+      },
+      xAxis: {
+        type: 'category',
+        name: '时间',
+        nameTextStyle: {
+          fontWeight: "bold",
+          fontSize: 14
+        },
+        nameGap: 25,
+        boundaryGap: false,
+        data: chartData.xData.map(function (str: string) {
+          return str.replace(' ', '\n')
+        })
+      },
+      yAxis: {
+        name: '请求数量/个',
+        nameLocation: 'middle',
+        nameTextStyle: {
+          fontWeight: "bold",
+          fontSize: 15,
+          padding: [14, 14, 14, 14]
+        },
+        type: 'value',
+        minInterval: 1,
+        axisLine: {
+          show: 'true',
+          symbol: ['none', 'arrow'],
+          symbolSize: [9, 15],
+          symbolOffset: [0, 12],
+          lineStyle: {
+            type: 'solid'
+          }
+        },
+      },
+      series: [
+        {
+          data: chartData.yData,
+          type: 'line',
+          lineStyle: {
+            color: '#4c75a3',
+            width: 3
+          },
+          itemStyle: {
+            color: '#1a2942'
+          },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [{
+                offset: 0, color: 'rgba(76, 117, 163, 0.3)'
+              }, {
+                offset: 1, color: 'rgba(76, 117, 163, 0.05)'
+              }],
+            }
+          }
+        }
+      ]
+    }
+  } else if (chartData.graphType === 'Histogram') {
+    option = {
+      title: {
+        text: '请求数量时段分布图',
+        left: 'center'
+      },
+      tooltip: {
+        trigger: 'item'
+      },
+      xAxis: {
+        type: 'category',
+        name: '时间',
+        nameTextStyle: {
+          fontWeight: "bold",
+          fontSize: 14
+        },
+        nameGap: 25,
+        axisLabel: {interval: 0, rotate: 30},
+        data: chartData.xData
+      },
+      yAxis: {
+        name: '请求数量/个',
+        nameLocation: 'middle',
+        nameTextStyle: {
+          fontWeight: "bold",
+          fontSize: 15,
+          padding: [14, 14, 14, 14]
+        },
+        type: 'value',
+        minInterval: 1,
+        axisLine: {
+          show: 'true',
+          symbol: ['none', 'arrow'],
+          symbolSize: [9, 15],
+          symbolOffset: [0, 12],
+          lineStyle: {
+            type: 'solid'
+          }
+        },
+      },
+      series: [
+        {
+          data: chartData.yData,
+          type: 'bar',
+          barWidth: '40%',
+          itemStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [{
+                offset: 0, color: '#1a2942'
+              }, {
+                offset: 1, color: '#4c75a3'
+              }],
+            }
+          }
+        }
+      ]
+    }
+  } else if (chartData.graphType === 'PieChart') {
+    option = {
+      title: {
+        text: '请求响应状态分布图',
+        left: 'center'
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: '{a} <br/>{b} : {c} ({d}%)'
+      },
+      legend: {
+        bottom: 10,
+        left: 'center'
+      },
+      series: [
+        {
+          name: '响应状态',
+          type: 'pie',
+          radius: '55%',
+          center: ['50%', '50%'],
+          data: chartData.pieData,
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowColor: 'rgba(0, 0, 0, 0.5)'
+            }
+          },
+          labelLine: {
+            smooth: 0.2,
+            length: 10,
+            length2: 20
+          },
+          itemStyle: {
+            color: function(params: any) {
+              // 获取状态码，可能需要从名称中提取
+              const statusMatch = params.name.match(/^(\d{3})/)
+              const statusCode = statusMatch ? statusMatch[1] : ''
+              
+              // 根据状态码返回不同颜色
+              if (statusCode.startsWith('2')) {  // 2xx 成功状态
+                return '#67c23a'  // 绿色
+              } else if (statusCode.startsWith('3')) {  // 3xx 重定向
+                return '#909399'  // 灰色
+              } else if (statusCode.startsWith('4')) {  // 4xx 客户端错误
+                if (statusCode === '404') {
+                  return '#e6a23c'  // 404 用橙色
+                }
+                return '#f56c6c'  // 其他客户端错误用红色
+              } else if (statusCode.startsWith('5')) {  // 5xx 服务器错误
+                return '#d81e06'  // 深红色
+              }
+              
+              // 默认颜色
+              return '#4c75a3'  // 蓝色
+            }
+          }
+        }
+      ]
+    }
+  }
+  
+  // 初始化图表
+  const chartElement = document.querySelector('.chart-display') || document.querySelector('.pie-chart')
+  if (chartElement) {
+    const chart = echarts.init(chartElement as HTMLElement)
+    chart.clear()
+    chart.setOption(option)
+    loading.value = false
+    console.log('作图完成')
+  }
+}
+
+// 监听选项变化
+watch(timeunitvalue, (newValue) => {
+  if (newValue === '小时') {
+    timeUnitValue.value = 'HOUR'
+  } else if (newValue === '天') {
+    timeUnitValue.value = 'DAY'
+  } else if (newValue === '月') {
+    timeUnitValue.value = 'MONTH'
+  } else {
+    console.log('timeunitvalue error')
+  }
+  middle.service_id = serviceId.value
+  middle.time_unit = timeUnitValue.value
+  middle.start_time = timeValue1.value[0]
+  middle.end_time = timeValue1.value[1]
+  loadServiceLogLineChart(middle)
+})
+
+watch(timeSpanNum, (newValue) => {
+  middle.service_id = serviceId.value
+  middle.time_span_num = newValue
+  middle.start_time = timeValue2.value[0]
+  middle.end_time = timeValue2.value[1]
+  console.log(middle, 'middle in watch')
+  if (pageIndex.value === 2) {
+    loadServiceLogHistogram(middle)
+    console.log('Histogram page in watch')
+  } else {
+    console.log('error')
+  }
+})
+
+watch(pageIndex, (newValue) => {
+  getBeforeOneDay()
+  timeValue1.value = [defaultStart.value, defaultEnd.value]
+  timeValue2.value = [defaultStart.value, defaultEnd.value]
+  timeValue3.value = [defaultStart.value, defaultEnd.value]
+  if (newValue === 1) {
+    changeGraphType('LineChart')
+    console.log('LineChart page in watch')
+  } else if (newValue === 2) {
+    changeGraphType('Histogram')
+    console.log('Histogram page in watch')
+  } else if (newValue === 3) {
+    changeGraphType('PieChart')
+    console.log('PieChart page in watch')
+  } else {
+    console.log('error')
+  }
+})
+
+watch(timeValue1, (newvalue) => {
+  console.log(timeValue1.value, 'timeValue1')
+  if (newvalue != null) {
+    if (pageIndex.value === 1) {
+      middle.service_id = serviceId.value
+      middle.time_unit = timeUnitValue.value
+      middle.start_time = timeValue1.value[0]
+      middle.end_time = timeValue1.value[1]
+      loadServiceLogLineChart(middle)
+      console.log('LineChart timevalue1 in watch')
+    }
+  }
+})
+
+watch(timeValue2, (newvalue) => {
+  console.log(timeValue2.value, 'timeValue2')
+  if (newvalue != null) {
+    if (pageIndex.value === 2) {
+      middle.service_id = serviceId.value
+      middle.time_span_num = timeSpanNum.value
+      middle.start_time = timeValue2.value[0]
+      middle.end_time = timeValue2.value[1]
+      loadServiceLogHistogram(middle)
+      console.log('Histogram timevalue2 in watch')
+    } 
+  }
+})
+
+watch(timeValue3, (newvalue) => {
+  console.log(timeValue3.value, 'timeValue3')
+  if (newvalue != null) {
+    if (pageIndex.value === 3) {
+      middle.service_id = serviceId.value
+      middle.start_time = timeValue3.value[0]
+      middle.end_time = timeValue3.value[1]
+      loadServiceLogPieChart(middle)
+      console.log('PieChart timevalue3 in watch')
+    }
+  }
+})
+
+// 组件挂载时初始化
+onMounted(() => {
+  getBeforeOneDay()
+  const route = useRoute()
+  serviceId.value = route.query.serviceId as string
+  middle.service_id = serviceId.value
+  middle.time_unit = timeUnitValue.value
+  middle.start_time = timeValue1.value[0]
+  middle.end_time = timeValue1.value[1]
+  loadServiceLogLineChart(middle)
+  console.log(serviceId.value, timeValue1.value, 'serviceId in created')
+})
 </script>
 
 <style scoped>
@@ -981,7 +987,7 @@ export default {
 
 /* 表格标题区域 */
 .table-header {
-  background: linear-gradient(to right, #1a2942, #4c75a3);
+  background:  #4c75a3;
   color: white;
   padding: 15px 20px;
   border-top-left-radius: 8px;

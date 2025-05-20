@@ -115,8 +115,8 @@
                   <el-table-column prop="version_desc" label="描述" min-width="15%" align="center"/>
                   <el-table-column prop="is_used" label="是否使用" min-width="15%" align="center">
                     <template #default="scope">
-                      <el-link :underline="false" type="primary" @click="openServiceDialog(scope.row)" v-if="scope.row.is_used === 1">{{ imageStateDic[scope.row.is_used] }}</el-link>
-                      <el-tag type="info" effect="plain" v-if="scope.row.is_used === 0">{{ imageStateDic[scope.row.is_used] }}</el-tag>
+                      <el-link :underline="false" type="primary" @click="openServiceDialog(scope.row)" v-if="scope.row.is_used === 1">{{ imageStateDic[scope.row.is_used as keyof typeof imageStateDic] }}</el-link>
+                      <el-tag type="info" effect="plain" v-if="scope.row.is_used === 0">{{ imageStateDic[scope.row.is_used as keyof typeof imageStateDic] }}</el-tag>
                     </template>
                   </el-table-column>
                   <el-table-column prop="create_time" label="导入时间" min-width="18%" align="center"/>
@@ -468,7 +468,7 @@
           </el-table-column>
           <el-table-column property="service_state" label="状态" min-width="30%" align="center">
             <template #default="scope">
-              <el-tag :style="setStateStyle(scope.row.service_state)" round >{{ serviceStateDic[scope.row.service_state]}}</el-tag>
+              <el-tag :style="setStateStyle(scope.row.service_state)" round >{{ serviceStateDic[scope.row.service_state as keyof typeof serviceStateDic]}}</el-tag>
             </template>
           </el-table-column>
         </el-table>
@@ -501,686 +501,597 @@
   </div>
 </template>
 
-<script>
-
-import { UploadFilled, ArrowDown, WarningFilled, Refresh, ArrowRight, Picture, Search, Plus } from '@element-plus/icons-vue';
+<script lang="ts" setup>
+import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, FormInstance } from "element-plus"
+import { UploadFilled, ArrowDown, WarningFilled, Refresh, ArrowRight, Picture, Search, Plus } from '@element-plus/icons-vue'
 import { imageUpload, imageMerge, imagePush, imageSave, imageModify, imageDelete, imageVersionDelete, uploadCancel } from '@/utils/before'
-import request from "@/utils/request";
-import { ElMessage } from "element-plus";
-import md5 from 'js-md5';
-import SparkMD5 from 'spark-md5';
-import router from "@/router";
-import { useRoute } from 'vue-router';
+import request from "@/utils/request"
+import md5 from 'js-md5'
+import SparkMD5 from 'spark-md5'
 
-export default {
-  name: "ImageList",
-  components: {
-    UploadFilled,
-    ArrowDown,
-    WarningFilled,
-    Refresh,
-    ArrowRight,
-    Picture,
-    Search,
-    Plus,
-  },
-  data(){
+const router = useRouter()
+const route = useRoute()
 
-    return{
-      a:true,
-      ArrowRight,
-      Picture,
-
-      pageIndex:1,
-      imageState:'',
-      imageStateList:[],
-      selectInputByImageName:'',
-      selectInputByPublicImageName:'',
-      myImageData:[
-        {
-          image_version:[
-            {}
-          ]
-        }
-      ],
-      publicImageData:[],
-      myImageLoading:false,
-      modifyMyImageDialog:false,
-      formOfModifyMyImage:{},
-      formOfImageInfoImport:{
-        imageName:'',
-        isPublic:'不公开',
-        imageDesc:'',
-      },
-      formOfImageVersionImport:{},
-      //文件的上传对象
-      uploadFile:{},
-      importMyImageInfoDialog:false,
-      publicImageLoading:false,
-      uploadFileDialog:false,
-      importMyImageVersionDialog:false,
-      uploadingDialog:false,
-      //文件上传切片大小为20M
-      sliceSize: 10 * 1024 * 1024,
-      successUploadSliceDic:{},
-      rules:{
-        imageName:[{required:true,message:'请输入镜像名称！',trigger:'blur'}],
-        tag:[{required:true,message:'请输入版本号！',trigger:'blur'}]
-      },
-      completionDic:{},
-      identifier:'',
-      imageNameDic:{},
-      imageIdDic:{},
-      imageTagDic:{},
-      imageVersionDescDic:{},
-      fileSizeDic:{},
-      fileNameDic:{},
-      publicImageOwner:1,
-      publicImageOwnerList:[
-        {
-          label:'显示所有公开镜像',
-          value:1
-        },
-        {
-          label:'显示当前用户公开镜像',
-          value:2
-        },
-        {
-          label:'显示其他用户公开镜像',
-          value:3
-        }
-      ],
-      currentImageName:'',
-      currentImageId:'',
-      imageStateDic:{
-        0 : '未在使用',
-        1 : '正在使用'
-      },
-      abortController: new AbortController(),
-      imageServiceDialog:false,
-      imageServiceLoading:false,
-      imageDeleteDialog:false,
-      imageServiceData:[],
-      imageDeleteData:{
-        currentImageId:'',
-        versionNum:'',
-      },
-      imageUploadErr:false,
-      closeFlag:false,
-      // uploadMessage:'正在计算文件的MD5码\n正在上传文件切片...\n切片上传完成！\n合并文件中...\n合并文件成功！\n正在推送文件至仓库...\n文件推送成功！\n上传成功！',
-      uploadMessage:'',
-      uploadingFlag:true,
-      serviceStateDic:{
-        running:'运行中',
-        stoped:'停止',
-        exited:'停止',
-        error:'异常',
-        waiting:'等待资源',
-        starting:'部署中',
-      },
-    }
-  },
-  computed:{
-  },
-  components:{
-    ArrowDown,
-  },
-  created() {
-    const route = useRoute();
-    if(route.query.imageVersionId){
-      console.log(route.query.imageVersionId,'route.query.imageVersionId')
-      let imageVersionId = route.query.imageVersionId;
-      let middle = {image_version_id:imageVersionId};
-      this.loadMyImage(middle);
-    }else{
-      this.loadMyImage();
-    }
-  },
-  mounted() {
-
-  },
-  watch:{
-    pageIndex:{
-      handler(newValue,oldValue){
-        if(newValue === 2){
-          let middle = {
-            is_public : 1
-          }
-          //加载公开镜像
-          this.loadPublicImage(middle);
-        }else if(newValue === 1){
-          this.loadMyImage();
-        }
-      },
-      deep:true
-    },
-    imageUploadErr:{
-      handler(newValue,oldValue){
-        if(!oldValue && newValue){
-          this.uploadMessage += '\n上传文件失败！';
-          this.uploadingFlag = false;
-          this.closeFlag = true;
-          // this.uploadingDialog = false;
-        }
-      },
-      deep:true
-    },
-    'formOfImageVersionImport.tag':{
-      handler(newValue,oldValue){
-      },
-      deep:true
-    },
-  },
-  methods:{
-    // 获取所有镜像版本总数
-    getTotalVersions(imageList) {
-      let total = 0;
-      imageList.forEach(image => {
-        if (image.version_num) {
-          total += parseInt(image.version_num);
-        }
-      });
-      return total;
-    },
-    
-    // 获取使用中的镜像版本数
-    getUsedImageVersions(imageList) {
-      let usedCount = 0;
-      imageList.forEach(image => {
-        if (image.image_version && image.image_version.length > 0) {
-          image.image_version.forEach(version => {
-            if (version.is_used === 1) {
-              usedCount++;
-            }
-          });
-        }
-      });
-      return usedCount;
-    },
-    changePageIndex(param){
-      this.pageIndex = param;
-    },
-
-    loadMyImage(param){
-      this.myImageLoading = true;
-      request.get('/ImageRepository/GetImageRepositoryList',{
-        params:param ? param : {}
-      }).then(res=>{
-        console.log(res.data,'data')
-        this.myImageData = res.data;
-        this.myImageLoading = false;
-      })
-    },
-
-    loadPublicImage(param){
-      this.publicImageLoading = true;
-      request.get('/ImageRepository/GetImageRepositoryList',{
-        params:param ? param : {is_public : 1}
-      }).then(res=>{
-        console.log(res.data,'data')
-        this.publicImageData = res.data;
-        this.publicImageLoading = false;
-      })
-    },
-
-    selectByImageState(){
-
-    },
-
-    openImageImportDialog(){
-      this.importMyImageInfoDialog = true;
-      this.formOfImageInfoImport = {
-        imageName:'',
-        isPublic:'不公开',
-        tag:'',
-      }
-    },
-
-    //根据镜像名称模糊搜索
-    selectByImageName(){
-      let middle = {
-        image_name:this.selectInputByImageName,
-      };
-      this.loadMyImage(middle);
-    },
-
-    //部署，跳转到部署页面
-    createOnlineService(image,imageVersion){
-      router.push({path:'/onlineServiceDeploy',query:{imageName:image.image_name,imageId:image.image_id,
-          imageTag:imageVersion.tag,imageVersionId:imageVersion.image_version_id,deployMode:'imageSpecific'}});
-    },
-
-    //打开镜像版本对应的在线服务的列表
-    openServiceDialog(param){
-      this.imageServiceDialog = true;
-      let middle = {
-        image_version_id:param.image_version_id
-      }
-      request.get('/ImageRepository/GetImageServiceList',{
-        params: middle
-      }).then(res=>{
-        console.log(res.data,'res.data')
-        this.imageServiceData = res.data;
-      })
-    },
-
-    openModifyImageDialog(){
-
-    },
-
-    //点击修改，弹出镜像修改的表单
-    openModifyVersionDialog(param){
-      this.modifyMyImageDialog = true;
-      this.currentImageId = param.image_id;
-      this.formOfModifyMyImage.imageName = param.image_name;
-      this.formOfModifyMyImage.imageDesc = param.image_desc;
-      this.formOfModifyMyImage.isPublic = param.is_public === 0 ? '不公开' : '公开';
-    },
-
-    //镜像信息的修改
-    modifyMyImage(){
-      let middle = {
-        image_id: this.currentImageId,
-        image_name: this.formOfModifyMyImage.imageName,
-        image_desc: this.formOfModifyMyImage.imageDesc,
-        is_public: this.formOfModifyMyImage.isPublic === '不公开' ? 0 : 1,
-      }
-      imageModify(middle).then(res=>{
-        ElMessage({message:'修改成功！',type:'success',offset:60})
-        console.log(res.data,'data in imagemodify');
-        this.modifyMyImageDialog = false;
-        this.loadMyImage();
-      }).catch(err=>{
-        ElMessage({message:'修改失败！',type:'error',offset:60})
-        console.log(err,'err in imagemodify')
-        this.modifyMyImageDialog = false;
-      })
-    },
-
-    versionDeleteMethod(param,slot){
-      let middle = {
-        image_version_id:param.image_version_id,
-      }
-      console.log(middle,middle)
-      imageVersionDelete(middle).then(res=>{
-        ElMessage({message:'删除成功！',type:'success',offset:60})
-        console.log(res.data,'data in imagedelete')
-        this.loadMyImage();
-      }).catch(err=>{
-        ElMessage({message:'删除失败！',type:'error',offset:60})
-        console.log(err,'err in imagedelete')
-      })
-    },
-
-    //添加镜像版本
-    addVersion(param){
-      this.importMyImageVersionDialog = true;
-      this.formOfImageVersionImport.tag = '';
-      this.formOfImageVersionImport.imageVersionDesc = '';
-      this.currentImageName = param.image_name;
-      this.currentImageId = param.image_id;
-      if(this.$refs.uploadRef){
-        this.$refs.uploadRef.clearFiles();
-      }
-      this.uploadFile = {};
-
-    },
-
-    //打开镜像删除的提示框
-    openImageDeleteDialog(param){
-      this.imageDeleteDialog = true;
-      this.imageDeleteData.currentImageId = param.image_id;
-      this.imageDeleteData.versionNum = param.version_num;
-    },
-
-    //镜像的删除
-    imageDeleteMethod(){
-      let middle = {
-        image_id:this.imageDeleteData.currentImageId,
-      }
-      imageDelete(middle).then(res=>{
-        ElMessage({message:'删除成功！',type:'success',offset:60})
-        this.imageDeleteDialog = false;
-        this.imageDeleteData.currentImageId = '';
-        this.imageDeleteData.versionNum = '';
-        console.log(res.data,'data in imagedelete')
-        this.loadMyImage();
-      }).catch(err=>{
-        this.imageDeleteDialog = false;
-        this.imageDeleteData.currentImageId = '';
-        this.imageDeleteData.versionNum = '';
-        ElMessage({message:'删除失败！',type:'error',offset:60})
-        console.log(err,'err in imagedelete')
-      })
-
-    },
-
-    selectByImageOwner(){
-
-    },
-    selectByPublicImageName(){
-      let middle = {
-        image_name:this.selectInputByPublicImageName,
-        is_public : 1
-      };
-      this.loadPublicImage(middle);
-    },
-
-    //取消上传
-    cancelUpload(){
-      this.uploadingDialog = false;
-      this.abortController.abort();
-      uploadCancel(JSON.stringify(this.identifier)).then(res=>{
-        console.log('通知后端取消上传成功')
-      }).catch(err=>{
-        console.log('通知后端取消上传失败')
-      })
-    },
-
-    //创建镜像
-    async importMyImageInfo(){
-      await this.$refs.imageImportRef.validate((valid)=>{
-        if(valid){
-          console.log('验证成功')
-          //验证成功后调用创建镜像的接口
-          let middle = {
-            image_name:this.formOfImageInfoImport.imageName,
-            image_desc:this.formOfImageInfoImport.imageDesc || '',
-            is_public:this.formOfImageInfoImport.isPublic === '不公开' ? 0 : 1,
-          }
-          imageSave(middle).then(res=>{
-            console.log(res,'res in imagesave')
-            ElMessage({message:'创建成功！',type:'success',offset:60})
-            this.importMyImageInfoDialog = false;
-            this.loadMyImage();
-          }).catch(err=>{
-            console.log(err,'err')
-            if(err.response.status === 412){
-              ElMessage({message:err.response.data.detail,type:'error',offset:60});
-            }else{
-              this.importMyImageInfoDialog = false;
-              ElMessage({message:'创建失败！',type:'error',offset:60})
-            }
-
-          });
-        }else{
-          console.log('验证失败')
-          ElMessage({message:'请完善服务信息！', type:'error', offset:60});
-        }
-      });
-
-    },
-
-    //对文件进行切片，并分片调用接口上传文件
-    async fileSlice(){
-      if(JSON.stringify(this.uploadFile) === '{}'){
-        ElMessage({message:'请上传镜像文件！', type:'error', offset:60});
-      }else{
-        this.importMyImageVersionDialog = false;
-        this.uploadingFlag = true;
-        this.closeFlag = false;
-        this.uploadMessage = '';
-        this.uploadingDialog = true;
-        ElMessage({message:'开始上传!',type:'success',offset:60,customClass:'messageIndex'})
-        //上传文件切片的数量
-        let sliceNum = Math.ceil(this.uploadFile.size / this.sliceSize);
-        const p = await this.computeFileMd5(this.uploadFile,sliceNum);
-        console.log(this.identifier,'this.identifier');
-        //文件的唯一标识符，通过Md5对文件进行编码得到
-        let identifier = this.identifier;
-        //上传镜像的名称
-        this.imageNameDic[identifier] =  this.currentImageName;
-        //上传镜像的ID
-        this.imageIdDic[identifier] = this.currentImageId;
-        //上传镜像的版本号
-        this.imageTagDic[identifier] = this.formOfImageVersionImport.tag;
-        //上传镜像的版本描述
-        this.imageVersionDescDic[identifier] = this.formOfImageVersionImport.imageVersionDesc;
-        //上传文件的大小
-        this.fileSizeDic[identifier] = this.uploadFile.size;
-        //上传文件的名称
-        this.fileNameDic[identifier] = this.uploadFile.name;
-
-        console.log(sliceNum,'s,type')
-        this.successUploadSliceDic[identifier] = 0;
-        this.imageUploadErr = false;
-        this.abortController =  new AbortController();
-        this.uploadMessage += '\n正在上传文件切片...';
-        for (let i = 1; i <= sliceNum; i++) {
-          let chunk;
-          if (i === sliceNum) {
-            // 最后一片
-            chunk = this.uploadFile.slice((i - 1) * this.sliceSize, this.fileSizeDic[identifier]);//切割文件
-          } else {
-            chunk = this.uploadFile.slice((i - 1) * this.sliceSize, i * this.sliceSize);
-          }
-          const formData = new FormData();
-          formData.append("file", chunk);
-          formData.append("identifier", identifier);
-          formData.append("number", i - 1);
-          this.uploadFileInter(formData,sliceNum,identifier);
-        }
-        console.log('切片上传请求发送完成，等待浏览器处理')
-        this.$refs.uploadRef.clearFiles()
-        this.uploadFile = {};
-      }
-    },
-
-    //新增版本弹窗的确定按钮
-    async importMyImageVersion(){
-      //首先对镜像导入的信息进行规则校验
-      await this.$refs.imageVersionImportRef.validate((valid)=>{
-        // val = valid ? true : false;
-        if(valid){
-          request.get('/ImageRepository/JudgeImageVersionRepeat',{
-            params:{image_id:this.currentImageId,tag:this.formOfImageVersionImport.tag}
-          }).then(res=>{
-            console.log(res,'res')
-            if (res.code === '1') {
-              ElMessage({message:'版本号重复！', type:'error', offset:60});
-            } else{
-              this.fileSlice();
-            }
-          })
-        }else{
-          ElMessage({message:'请根据提示修改完善信息！', type:'error', offset:60});
-        }
-      })
-
-    },
-
-    //分片上传文件的接口
-    uploadFileInter(data,sliceNum,identifier){
-      let middle = {
-        signal: this.abortController.signal
-      }
-      imageUpload(data,middle).then(res=>{
-        console.log(res.data,'res in imageUpload')
-        if(res.data.code === 200){
-          this.successUploadSliceDic[identifier] += 1;
-          this.completionDic[identifier] = ((this.successUploadSliceDic[identifier] / sliceNum) * 100).toFixed(1);
-          console.log('进度：',this.completionDic[identifier])
-          //当前切片是文件的最后一个切片，发送合并切片请求
-          if(this.successUploadSliceDic[identifier] === sliceNum){
-            console.log('merging')
-            this.uploadMessage += '\n切片上传完成！';
-            let middle = {
-              name:this.fileNameDic[identifier],
-              total_slice:sliceNum,
-              identifier:identifier
-            }
-            this.mergeSlice(middle,identifier)
-          }
-        }
-      }).catch(err=>{
-        if(err.code === 'ERR_CANCELED'){
-          //请求已取消
-        }else{
-          this.abortController.abort();//分片上传的接口出错，停止后续接口的上传
-          this.imageUploadErr = true;
-        }
-      })
-    },
-
-    //合并切片
-    mergeSlice(data,identifier){
-      // ElMessage({message:'开始合并文件!',type:'success',offset:60})
-      this.uploadingFlag = false;
-      this.uploadMessage += '\n合并文件中...';
-      let middle = {
-        signal: this.abortController.signal
-      }
-      imageMerge(data,middle).then(res=>{
-        console.log(res.data,'res in merge');
-        this.uploadMessage += '\n合并文件成功！';
-        this.pushImage(identifier);
-      }).catch(err=>{
-        // ElMessage({message:'合并错误！',type:'error',offset:60})
-        this.uploadMessage += '\n合并错误！';
-        this.uploadingFlag = false;
-        this.closeFlag = true;
-        // this.uploadingDialog = false;
-      })
-      this.successUploadSliceDic[identifier] = 0;
-    },
-
-    //将镜像push到huber仓库
-    pushImage(identifier){
-      // ElMessage({message:'开始推送文件至仓库！',type:'success',offset:60})
-      this.uploadMessage += '\n正在推送文件至仓库...'
-      let data = {
-        image_id:this.imageIdDic[identifier],
-        image_name:this.imageNameDic[identifier],
-        tag:this.imageTagDic[identifier],
-        file_name:this.fileNameDic[identifier],
-        desc:this.imageVersionDescDic[identifier] || '',
-        md5:identifier
-      }
-      let middle = {
-        signal: this.abortController.signal
-      }
-      console.log(data,'middle')
-      console.log(data,'middle in pushimage')
-      imagePush(data,middle).then(res=>{
-        // ElMessage({message:'上传成功！',type:'success',offset:60})
-        this.closeFlag = true;
-        this.uploadMessage += '\n文件推送成功！';
-        this.uploadMessage += '\n上传成功！';
-        // this.uploadingDialog = false;
-        this.loadMyImage();
-        console.log(res.data,'res.data')
-      }).catch(err=>{
-        // this.uploadingDialog = false;
-        this.closeFlag = true;
-        this.uploadMessage += '\n文件推送失败！';
-        this.uploadMessage += '\n上传失败！';
-        console.log(err,'err')
-      })
-    },
-
-    //导入文件
-    importFile(file){
-      this.identifier = '';
-      this.uploadFile = file.raw;
-      this.completionDic[this.identifier] = 0;
-    },
-
-    //计算文件的md5码
-    computeFileMd5Old(file){
-      const p = new Promise((resolve,reject)=>{
-        let fileReader = new FileReader();
-        fileReader.readAsArrayBuffer(file);
-        fileReader.onload = e => {
-          if (file.size != e.target.result.byteLength) {
-            ElMessage({message:'文件读取失败！',type:'error',offset:60})
-            return;
-          }
-          this.identifier = md5(e.target.result);
-          this.completionDic[this.identifier] = 0;
-          resolve(this.identifier);
-          console.log(this.identifier,'this.identifier')
-        };
-        fileReader.onerror = function(e) {
-          console.log(e,'e')
-          ElMessage({message:'文件读取出错！',type:'error',offset:60})
-        };
-      })
-      return p;
-
-    },
-    computeFileMd5(file,chunkCount){
-      const that = this;
-      this.uploadMessage += '\n正在计算文件的MD5码'
-      const p = new Promise((resolve,reject)=>{
-        let blobSlice = File.prototype.slice || File.prototype.mozSlice || File.prototype.webkitSlice;
-        let chunks = chunkCount;
-        let currentChunk = 0;
-        let spark = new SparkMD5.ArrayBuffer();
-        let fileReader = new FileReader();
-        fileReader.onload = function (e) {
-          spark.append(e.target.result);
-          currentChunk++;
-          if (currentChunk < chunks) {
-            loadNext();
-          } else {
-            that.identifier = spark.end();
-            resolve(that.identifier);
-          }
-        };
-        fileReader.onerror = function (e) {
-          that.closeFlag = true;
-          reject(e);
-        };
-        function loadNext() {
-          let start = currentChunk * that.sliceSize;
-          let end = start + that.sliceSize;
-          if (end > file.size) {
-            end = file.size;
-          }
-          fileReader.readAsArrayBuffer(blobSlice.call(file, start, end));
-        }
-        loadNext();
-      })
-      return p;
-
-    },
-    //导入文件取消
-    importFileCancel(){
-      this.$refs.uploadRef.clearFiles()
-      this.uploadFile = {};
-      this.uploadFileDialog = false;
-    },
-
-    //上传文件之前的校验
-    beforeUploadFile(file){
-      let suffix = file.name.split('.')[file.name.split('.').length - 1];
-      let trueOrFalse = (suffix === '.zip' || suffix === '.tar');
-      if(!trueOrFalse){
-        ElMessage({message:'文件格式不正确！',type:'error',offset:60});
-      }else{
-        console.log('文件格式正确!')
-      }
-      return trueOrFalse;
-    },
-    toServicePage(param){
-      router.push({path:'OnlineServiceList',query:{serviceId:param.service_id}})
-    },
-    //设置状态style
-    setStateStyle(param) {
-      if (param === '运行中' || param === 'running') {
-        return {"background-color": "#409eff", "color": "white","width":"80px"}
-      } else if (param === '部署中' || param === 'starting') {
-        return {"background-color": "#69B0E9", "color": "white","width":"80px"}
-      } else if (param === '停止' || param === 'stoped' || param === 'exited') {
-        return {"background-color": "#E29194", "color": "white","width":"80px"}
-      } else if (param === '异常' || param === 'error'){
-        return {"background-color": "#CD353B", "color": "white","width":"80px"}
-      } else if (param === '等待部署' || param === 'waiting'){
-        return {"background-color": "#00CED1", "color": "white","width":"80px"}
-      }
-    },
-  }
+// ======================== 基础数据 ========================
+const pageIndex = ref(1)
+const selectInputByImageName = ref('')
+const selectInputByPublicImageName = ref('')
+const myImageData = ref<any[]>([])
+const publicImageData = ref<any[]>([])
+const myImageLoading = ref(false)
+const publicImageLoading = ref(false)
+const modifyMyImageDialog = ref(false)
+const formOfModifyMyImage = reactive<{ imageName?: string; imageDesc?: string; isPublic?: string }>({})
+const formOfImageInfoImport = reactive<{ imageName: string; isPublic: string; imageDesc: string }>({ imageName: '', isPublic: '不公开', imageDesc: '' })
+const formOfImageVersionImport = reactive<{ tag?: string; imageVersionDesc?: string }>({})
+const uploadFile = ref<File | null>(null)
+const importMyImageInfoDialog = ref(false)
+const uploadFileDialog = ref(false)
+const importMyImageVersionDialog = ref(false)
+const uploadingDialog = ref(false)
+const sliceSize = 10 * 1024 * 1024
+const successUploadSliceDic = reactive<Record<string, number>>({})
+const rules = {
+  imageName: [{ required: true, message: '请输入镜像名称！', trigger: 'blur' }],
+  tag: [{ required: true, message: '请输入版本号！', trigger: 'blur' }]
 }
+const completionDic = reactive<Record<string, number | string>>({})
+const identifier = ref('')
+const imageNameDic = reactive<Record<string, string>>({})
+const imageIdDic = reactive<Record<string, string>>({})
+const imageTagDic = reactive<Record<string, string>>({})
+const imageVersionDescDic = reactive<Record<string, string>>({})
+const fileSizeDic = reactive<Record<string, number>>({})
+const fileNameDic = reactive<Record<string, string>>({})
+const publicImageOwner = ref(1)
+const publicImageOwnerList = [
+  { label: '显示所有公开镜像', value: 1 },
+  { label: '显示当前用户公开镜像', value: 2 },
+  { label: '显示其他用户公开镜像', value: 3 }
+]
+const currentImageName = ref('')
+const currentImageId = ref('')
+const imageStateDic = { 0: '未在使用', 1: '正在使用' }
+const abortController = ref(new AbortController())
+const imageServiceDialog = ref(false)
+const imageServiceLoading = ref(false)
+const imageDeleteDialog = ref(false)
+const imageServiceData = ref<any[]>([])
+const imageDeleteData = reactive<{ currentImageId: string; versionNum: string }>({ currentImageId: '', versionNum: '' })
+const imageUploadErr = ref(false)
+const closeFlag = ref(false)
+const uploadMessage = ref('')
+const uploadingFlag = ref(true)
+const serviceStateDic = {
+  running: '运行中',
+  stoped: '停止',
+  exited: '停止',
+  error: '异常',
+  waiting: '等待资源',
+  starting: '部署中',
+}
+
+// ref for form validation
+const imageImportRef = ref<FormInstance>()
+const imageVersionImportRef = ref<FormInstance>()
+const uploadRef = ref()
+
+// ======================== 计算属性与工具函数 ========================
+// 获取所有镜像版本总数
+function getTotalVersions(imageList: any[]) {
+  let total = 0
+  imageList.forEach(image => {
+    if (image.version_num) {
+      total += parseInt(image.version_num)
+    }
+  })
+  return total
+}
+
+// 获取使用中的镜像版本数
+function getUsedImageVersions(imageList: any[]) {
+  let usedCount = 0
+  imageList.forEach(image => {
+    if (image.image_version && image.image_version.length > 0) {
+      image.image_version.forEach((version: any) => {
+        if (version.is_used === 1) {
+          usedCount++
+        }
+      })
+    }
+  })
+  return usedCount
+}
+
+// ======================== 业务方法 ========================
+// 切换页面索引
+function changePageIndex(param: number) {
+  pageIndex.value = param
+}
+
+// 加载我的镜像
+function loadMyImage(param?: any) {
+  myImageLoading.value = true
+  request.get('/ImageRepository/GetImageRepositoryList', {
+    params: param ? param : {}
+  }).then(res => {
+    myImageData.value = res.data
+    myImageLoading.value = false
+  })
+}
+
+// 加载公开镜像
+function loadPublicImage(param?: any) {
+  publicImageLoading.value = true
+  request.get('/ImageRepository/GetImageRepositoryList', {
+    params: param ? param : { is_public: 1 }
+  }).then(res => {
+    publicImageData.value = res.data
+    publicImageLoading.value = false
+  })
+}
+
+// 根据镜像状态选择（占位函数）
+function selectByImageState() {
+  // 实现根据状态筛选的逻辑
+}
+
+// 打开镜像创建对话框
+function openImageImportDialog() {
+  importMyImageInfoDialog.value = true
+  formOfImageInfoImport.imageName = ''
+  formOfImageInfoImport.isPublic = '不公开'
+  formOfImageInfoImport.imageDesc = ''
+}
+
+// 根据镜像名称模糊搜索
+function selectByImageName() {
+  let middle = { image_name: selectInputByImageName.value }
+  loadMyImage(middle)
+}
+
+// 部署在线服务
+function createOnlineService(image: any, imageVersion?: any) {
+  router.push({
+    path: '/onlineServiceDeploy',
+    query: {
+      imageName: image.image_name,
+      imageId: image.image_id,
+      imageTag: imageVersion?.tag,
+      imageVersionId: imageVersion?.image_version_id,
+      deployMode: 'imageSpecific'
+    }
+  })
+}
+
+// 打开镜像版本对应的在线服务列表
+function openServiceDialog(param: any) {
+  imageServiceDialog.value = true
+  let middle = { image_version_id: param.image_version_id }
+  request.get('/ImageRepository/GetImageServiceList', {
+    params: middle
+  }).then(res => {
+    imageServiceData.value = res.data
+  })
+}
+
+// 打开修改镜像对话框（占位函数）
+function openModifyImageDialog() {
+  // 实现打开修改镜像对话框的逻辑
+}
+
+// 打开修改镜像版本对话框
+function openModifyVersionDialog(param: any) {
+  modifyMyImageDialog.value = true
+  currentImageId.value = param.image_id
+  formOfModifyMyImage.imageName = param.image_name
+  formOfModifyMyImage.imageDesc = param.image_desc
+  formOfModifyMyImage.isPublic = param.is_public === 0 ? '不公开' : '公开'
+}
+
+// 修改镜像信息
+function modifyMyImage() {
+  let middle = {
+    image_id: currentImageId.value,
+    image_name: formOfModifyMyImage.imageName,
+    image_desc: formOfModifyMyImage.imageDesc,
+    is_public: formOfModifyMyImage.isPublic === '不公开' ? 0 : 1,
+  }
+  imageModify(middle).then(() => {
+    ElMessage({ message: '修改成功！', type: 'success', offset: 60 })
+    modifyMyImageDialog.value = false
+    loadMyImage()
+  }).catch(() => {
+    ElMessage({ message: '修改失败！', type: 'error', offset: 60 })
+    modifyMyImageDialog.value = false
+  })
+}
+
+// 删除镜像版本
+function versionDeleteMethod(param: any, slot: any) {
+  let middle = { image_version_id: param.image_version_id }
+  imageVersionDelete(middle).then(() => {
+    ElMessage({ message: '删除成功！', type: 'success', offset: 60 })
+    loadMyImage()
+  }).catch(() => {
+    ElMessage({ message: '删除失败！', type: 'error', offset: 60 })
+  })
+}
+
+// 添加镜像版本
+function addVersion(param: any) {
+  importMyImageVersionDialog.value = true
+  formOfImageVersionImport.tag = ''
+  formOfImageVersionImport.imageVersionDesc = ''
+  currentImageName.value = param.image_name
+  currentImageId.value = param.image_id
+  nextTick(() => {
+    if (uploadRef.value && uploadRef.value.clearFiles) {
+      uploadRef.value.clearFiles()
+    }
+  })
+  uploadFile.value = null
+}
+
+// 打开镜像删除提示框
+function openImageDeleteDialog(param: any) {
+  imageDeleteDialog.value = true
+  imageDeleteData.currentImageId = param.image_id
+  imageDeleteData.versionNum = param.version_num
+}
+
+// 镜像整体删除
+function imageDeleteMethod() {
+  let middle = { image_id: imageDeleteData.currentImageId }
+  imageDelete(middle).then(() => {
+    ElMessage({ message: '删除成功！', type: 'success', offset: 60 })
+    imageDeleteDialog.value = false
+    imageDeleteData.currentImageId = ''
+    imageDeleteData.versionNum = ''
+    loadMyImage()
+  }).catch(() => {
+    imageDeleteDialog.value = false
+    imageDeleteData.currentImageId = ''
+    imageDeleteData.versionNum = ''
+    ElMessage({ message: '删除失败！', type: 'error', offset: 60 })
+  })
+}
+
+// 根据镜像拥有者筛选（占位函数）
+function selectByImageOwner() {
+  // 实现根据拥有者筛选的逻辑
+}
+
+// 根据公开镜像名称模糊搜索
+function selectByPublicImageName() {
+  let middle = {
+    image_name: selectInputByPublicImageName.value,
+    is_public: 1
+  }
+  loadPublicImage(middle)
+}
+
+// 取消上传
+function cancelUpload() {
+  uploadingDialog.value = false
+  abortController.value.abort()
+  uploadCancel(JSON.stringify(identifier.value)).then(() => {
+    // 通知后端取消上传成功
+  }).catch(() => {
+    // 通知后端取消上传失败
+  })
+}
+
+// 创建镜像
+async function importMyImageInfo() {
+  if (!imageImportRef.value) return
+  
+  await imageImportRef.value.validate((valid: boolean) => {
+    if (valid) {
+      // 验证成功后调用创建镜像的接口
+      let middle = {
+        image_name: formOfImageInfoImport.imageName,
+        image_desc: formOfImageInfoImport.imageDesc || '',
+        is_public: formOfImageInfoImport.isPublic === '不公开' ? 0 : 1,
+      }
+      
+      imageSave(middle).then(() => {
+        ElMessage({ message: '创建成功！', type: 'success', offset: 60 })
+        importMyImageInfoDialog.value = false
+        loadMyImage()
+      }).catch(err => {
+        if (err.response && err.response.status === 412) {
+          ElMessage({ message: err.response.data.detail, type: 'error', offset: 60 })
+        } else {
+          importMyImageInfoDialog.value = false
+          ElMessage({ message: '创建失败！', type: 'error', offset: 60 })
+        }
+      })
+    } else {
+      ElMessage({ message: '请完善服务信息！', type: 'error', offset: 60 })
+    }
+  })
+}
+
+// 文件切片处理
+async function fileSlice() {
+  if (!uploadFile.value) {
+    ElMessage({ message: '请上传镜像文件！', type: 'error', offset: 60 })
+    return
+  }
+  
+  importMyImageVersionDialog.value = false
+  uploadingFlag.value = true
+  closeFlag.value = false
+  uploadMessage.value = ''
+  uploadingDialog.value = true
+  ElMessage({ message: '开始上传!', type: 'success', offset: 60 })
+  
+  // 上传文件切片的数量
+  const sliceNum = Math.ceil(uploadFile.value.size / sliceSize)
+  await computeFileMd5(uploadFile.value, sliceNum)
+  
+  // 文件的唯一标识符
+  const id = identifier.value
+  imageNameDic[id] = currentImageName.value
+  imageIdDic[id] = currentImageId.value
+  imageTagDic[id] = formOfImageVersionImport.tag || ''
+  imageVersionDescDic[id] = formOfImageVersionImport.imageVersionDesc || ''
+  fileSizeDic[id] = uploadFile.value.size
+  fileNameDic[id] = uploadFile.value.name
+  
+  successUploadSliceDic[id] = 0
+  imageUploadErr.value = false
+  abortController.value = new AbortController()
+  uploadMessage.value += '\n正在上传文件切片...'
+  
+  for (let i = 1; i <= sliceNum; i++) {
+    let chunk
+    if (i === sliceNum) {
+      chunk = uploadFile.value.slice((i - 1) * sliceSize, fileSizeDic[id])
+    } else {
+      chunk = uploadFile.value.slice((i - 1) * sliceSize, i * sliceSize)
+    }
+    
+    const formData = new FormData()
+    formData.append("file", chunk)
+    formData.append("identifier", id)
+    formData.append("number", String(i - 1))
+    uploadFileInter(formData, sliceNum, id)
+  }
+  
+  nextTick(() => {
+    if (uploadRef.value && uploadRef.value.clearFiles) {
+      uploadRef.value.clearFiles()
+    }
+  })
+  uploadFile.value = null
+}
+
+// 新增版本确认
+async function importMyImageVersion() {
+  if (!imageVersionImportRef.value) return
+  
+  await imageVersionImportRef.value.validate((valid: boolean) => {
+    if (valid) {
+      request.get('/ImageRepository/JudgeImageVersionRepeat', {
+        params: { 
+          image_id: currentImageId.value, 
+          tag: formOfImageVersionImport.tag 
+        }
+      }).then(res => {
+        if (res.data.code === '1') {//weijiejuedewenti
+          ElMessage({ message: '版本号重复！', type: 'error', offset: 60 })
+        } else {
+          fileSlice()
+        }
+      })
+    } else {
+      ElMessage({ message: '请根据提示修改完善信息！', type: 'error', offset: 60 })
+    }
+  })
+}
+
+// 分片上传文件
+function uploadFileInter(data: FormData, sliceNum: number, id: string) {
+  const middle = { signal: abortController.value.signal }
+  
+  imageUpload(data, abortController.value.signal).then(res => {
+    if (res.data.code === 200) {
+      successUploadSliceDic[id] += 1
+      completionDic[id] = ((successUploadSliceDic[id] / sliceNum) * 100).toFixed(1)
+      
+      // 当前切片是文件的最后一个切片，发送合并切片请求
+      if (successUploadSliceDic[id] === sliceNum) {
+        uploadMessage.value += '\n切片上传完成！'
+        const mergeData = {
+          name: fileNameDic[id],
+          total_slice: sliceNum,
+          identifier: id
+        }
+        mergeSlice(mergeData, id)
+      }
+    }
+  }).catch(err => {
+    if (err.code === 'ERR_CANCELED') {
+      // 请求已取消
+    } else {
+      abortController.value.abort() // 分片上传的接口出错，停止后续接口的上传
+      imageUploadErr.value = true
+    }
+  })
+}
+
+// 合并切片
+function mergeSlice(data: any, id: string) {
+  uploadingFlag.value = false
+  uploadMessage.value += '\n合并文件中...'
+  
+  const middle = { signal: abortController.value.signal }
+  
+  imageMerge(data, abortController.value.signal).then(() => {
+    uploadMessage.value += '\n合并文件成功！'
+    pushImage(id)
+  }).catch(() => {
+    uploadMessage.value += '\n合并错误！'
+    uploadingFlag.value = false
+    closeFlag.value = true
+  })
+  
+  successUploadSliceDic[id] = 0
+}
+
+// 将镜像push到harbor仓库
+function pushImage(id: string) {
+  uploadMessage.value += '\n正在推送文件至仓库...'
+  
+  const data = {
+    image_id: imageIdDic[id],
+    image_name: imageNameDic[id],
+    tag: imageTagDic[id],
+    file_name: fileNameDic[id],
+    desc: imageVersionDescDic[id] || '',
+    md5: id
+  }
+  
+  const middle = { signal: abortController.value.signal }
+  
+  imagePush(data, abortController.value.signal).then(() => {
+    closeFlag.value = true
+    uploadMessage.value += '\n文件推送成功！'
+    uploadMessage.value += '\n上传成功！'
+    loadMyImage()
+  }).catch(() => {
+    closeFlag.value = true
+    uploadMessage.value += '\n文件推送失败！'
+    uploadMessage.value += '\n上传失败！'
+  })
+}
+
+// 处理导入文件
+function importFile(file: any) {
+  identifier.value = ''
+  uploadFile.value = file.raw
+  completionDic[identifier.value] = 0
+}
+
+// 计算文件的MD5码
+function computeFileMd5(file: File, chunkCount: number) {
+  uploadMessage.value += '\n正在计算文件的MD5码'
+  
+  return new Promise<string>((resolve, reject) => {
+    let blobSlice = File.prototype.slice
+    let chunks = chunkCount
+    let currentChunk = 0
+    let spark = new SparkMD5.ArrayBuffer()
+    let fileReader = new FileReader()
+    
+    fileReader.onload = function (e: any) {
+      spark.append(e.target.result)
+      currentChunk++
+      
+      if (currentChunk < chunks) {
+        loadNext()
+      } else {
+        identifier.value = spark.end()
+        completionDic[identifier.value] = 0
+        resolve(identifier.value)
+      }
+    }
+    
+    fileReader.onerror = function (e) {
+      closeFlag.value = true
+      reject(e)
+    }
+    
+    function loadNext() {
+      let start = currentChunk * sliceSize
+      let end = start + sliceSize
+      
+      if (end > file.size) {
+        end = file.size
+      }
+      
+      fileReader.readAsArrayBuffer(blobSlice.call(file, start, end))
+    }
+    
+    loadNext()
+  })
+}
+
+// 导入文件取消
+function importFileCancel() {
+  if (uploadRef.value && uploadRef.value.clearFiles) {
+    uploadRef.value.clearFiles()
+  }
+  uploadFile.value = null
+  uploadFileDialog.value = false
+}
+
+// 上传文件前的校验
+function beforeUploadFile(file: File) {
+  const suffix = file.name.split('.').pop()
+  const trueOrFalse = (suffix === 'zip' || suffix === 'tar')
+  
+  if (!trueOrFalse) {
+    ElMessage({ message: '文件格式不正确！', type: 'error', offset: 60 })
+  }
+  
+  return trueOrFalse
+}
+
+// 跳转到服务页面
+function toServicePage(param: any) {
+  router.push({ path: 'OnlineServiceList', query: { serviceId: param.service_id } })
+}
+
+// 设置状态样式
+function setStateStyle(param: string) {
+  if (param === '运行中' || param === 'running') {
+    return { "background-color": "#409eff", "color": "white", "width": "80px" }
+  } else if (param === '部署中' || param === 'starting') {
+    return { "background-color": "#69B0E9", "color": "white", "width": "80px" }
+  } else if (param === '停止' || param === 'stoped' || param === 'exited') {
+    return { "background-color": "#E29194", "color": "white", "width": "80px" }
+  } else if (param === '异常' || param === 'error') {
+    return { "background-color": "#CD353B", "color": "white", "width": "80px" }
+  } else if (param === '等待部署' || param === 'waiting') {
+    return { "background-color": "#00CED1", "color": "white", "width": "80px" }
+  }
+  return {}
+}
+
+// ======================== 监听与生命周期 ========================
+// 监听页面索引变化
+watch(pageIndex, (newValue) => {
+  if (newValue === 2) {
+    loadPublicImage({ is_public: 1 })
+  } else if (newValue === 1) {
+    loadMyImage()
+  }
+}, { immediate: true })
+
+// 监听上传错误状态
+watch(imageUploadErr, (newValue, oldValue) => {
+  if (!oldValue && newValue) {
+    uploadMessage.value += '\n上传文件失败！'
+    uploadingFlag.value = false
+    closeFlag.value = true
+  }
+}, { deep: true })
+
+// 组件挂载
+onMounted(() => {
+  if (route.query.imageVersionId) {
+    let imageVersionId = route.query.imageVersionId as string
+    let middle = { image_version_id: imageVersionId }
+    loadMyImage(middle)
+  } else {
+    loadMyImage()
+  }
+})
 </script>
 
 <style scoped>
