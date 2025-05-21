@@ -133,24 +133,51 @@ const stats = ref<Stats>({
 // 统计数据加载函数
 const loadStats = async () => {
   try {
+    // 单独处理每个API请求，防止一个失败影响其他请求
+    
     // 模型总数
-    const modelRes = await request.get('/ModelRepository/GetModelList')
-    stats.value.models = modelRes.data ? modelRes.data.length : 0
+    try {
+      const modelRes = await request.get('/ModelRepository/GetModelList')
+      stats.value.models = modelRes.data?.length || 0
+    } catch (err) {
+      console.error("模型数据加载失败:", err)
+      stats.value.models = 24 // 默认值
+    }
 
     // 服务总数
-    const serviceRes = await request.get('/OnlineService/GetOnlineServiceList')
-    stats.value.services = serviceRes.data ? serviceRes.data.length : 0
+    try {
+      const serviceRes = await request.get('/OnlineService/GetOnlineServiceList')
+      stats.value.services = serviceRes.data?.length || 0
+    } catch (err) {
+      console.error("服务数据加载失败:", err)
+      stats.value.services = 18 // 默认值
+    }
 
-    // 数据集总数
-    const datasetRes = await request.get('/data/search')
-    stats.value.datasets = datasetRes.data ? datasetRes.data.length : 0
+    // 数据集总数 - 修复：添加必需的Search参数
+    try {
+      const datasetRes = await request.get('/data/SearchAllData', {
+        params: {
+          Search: '' // 添加空搜索参数，返回所有数据集
+        }
+      })
+      stats.value.datasets = datasetRes.data?.length || 0
+    } catch (err) {
+      console.error("数据集数据加载失败:", err)
+      stats.value.datasets = 36 // 默认值
+    }
 
     // 任务总数
-    const taskRes = await request.get('/AutoModel/SearchTasks')
-    stats.value.tasks = taskRes.data ? taskRes.data.length : 0
+    try {
+      const taskRes = await request.get('/TaskManage/GetTaskList')
+      stats.value.tasks = taskRes.data?.length || 0
+    } catch (err) {
+      console.error("任务数据加载失败:", err)
+      stats.value.tasks = 42 // 默认值
+    }
+    
   } catch (error) {
-    console.error("统计数据加载失败", error)
-    // 加载失败时使用默认数据
+    console.error("统计数据总体加载失败", error)
+    // 整体失败时使用所有默认值
     stats.value = {
       models: 24,
       services: 18,
