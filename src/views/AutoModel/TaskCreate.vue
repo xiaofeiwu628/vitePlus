@@ -1,6 +1,4 @@
 <template>
-
-
       <div class="header-area">
             <el-breadcrumb :separator-icon="ArrowRight">
               <el-breadcrumb-item :to="{ path: '/taskView' }">自动建模</el-breadcrumb-item>
@@ -273,7 +271,7 @@
                 </el-select>
                 <el-cascader
                   v-model="item.col"
-                  style="setStyle(item)"
+                  :style="setStyle(item)"
                   :options="this.numericalList"
                   @change="disabledSelectedNumericCol(), partRecordChanged(item)"
                 />
@@ -1147,6 +1145,7 @@ export default {
       pageIndex: 0,
       dataSet: [],
       dataSheet: [],
+      isComponentReady: false,
       // taskType:['回归','分类','时间序列预测'],
       taskType: [
         {
@@ -1272,13 +1271,13 @@ export default {
     QuestionFilled,
   },
   watch: {
-    currentColDataType: {
+    currentColDataType: {//监听当前列的数据类型变化
       handler() {
         console.log(this.currentColDataType, "this.currentdatatype");
       },
       deep: true,
     },
-    taskName: {
+    taskName: {//监听任务名称变化
       handler() {
         if (this.taskName !== "") {
           this.nameLack = false;
@@ -1287,14 +1286,14 @@ export default {
       },
       deep: true,
     },
-    columnDefaultConfig: {
+    columnDefaultConfig: {//监听特征表配置变化
       handler() {
         console.log(this.columnDefaultConfig, "this.columnDefaultConfig");
         console.log(this.featureTableData, "this.featureTableData");
       },
       deep: true,
     },
-    singleFeatureDialogVisible: {
+    singleFeatureDialogVisible: {//监听单字段特征处理弹窗变化
       handler() {
         //只要单字段弹窗关闭，暂存的要更改的数据就清空
         if (!this.singleFeatureDialogVisible) {
@@ -1304,13 +1303,13 @@ export default {
       },
       deep: true,
     },
-    rowValue: {
+    rowValue: {//监听行数变化
       handler() {
         console.log(this.rowValue);
       },
       deep: true,
     },
-    dataSetValue: {
+    dataSetValue: {//监听数据集变化
       handler() {
         if (this.dataSetValue !== "") {
           this.dataSetLack = false;
@@ -1327,7 +1326,7 @@ export default {
       },
       deep: true,
     },
-    dataSheetValue: {
+    dataSheetValue: {//监听数据表变化
       handler() {
         if (this.dataSheetValue !== "") {
           this.dataSheetLack = false;
@@ -1345,7 +1344,7 @@ export default {
       },
       deep: true,
     },
-    taskTypeValue: {
+    taskTypeValue: {//监听任务类型变化
       handler(newValue, oldValue) {
         if (this.taskTypeValue !== "") {
           this.taskTypeLack = false;
@@ -1413,7 +1412,7 @@ export default {
       },
       deep: true,
     },
-    timeColValue: {
+    timeColValue: {//监听时间列变化
       handler(newValue, oldValue) {
         if (this.timeColValue !== "") {
           this.timeColLack = false;
@@ -1442,7 +1441,7 @@ export default {
       },
       deep: true,
     },
-    targetColValue: {
+    targetColValue: {//监听目标列变化
       handler(newValue, oldValue) {
         if (this.targetColValue !== "") {
           this.targetColLack = false;
@@ -1479,7 +1478,7 @@ export default {
       },
       deep: true,
     },
-    featureColValue: {
+    featureColValue: {//
       handler(newValue, oldValue) {
         console.log(this.featureColValue, "this.featureColValue");
         console.log(this.columnsCascader, "this.columnsCascader");
@@ -1509,14 +1508,16 @@ export default {
       },
       deep: true,
     },
-    model: {
+    model: {//监听模型参数变化
       handler() {
         console.log(this.model, "this.model in watch of model");
-        this.computeNumOfGrid();
+        if (this.isComponentReady) {
+          this.computeNumOfGrid();//重新计算网格搜索次数
+        }
       },
-      deep: true,
+      deep: true,//深度监听
     },
-    modelName: {
+    modelName: {//监听模型名称变化
       handler() {
         if (this.modelName === "LSTM") {
           this.model = this.parameterTableDataLstm;
@@ -1634,7 +1635,11 @@ export default {
   },
   mounted() {
     this.loadUserData();
-    this.computeNumOfGrid();
+    // 等待数据加载完成后标记组件准备就绪
+    this.$nextTick(() => {
+      this.isComponentReady = true;
+      this.computeNumOfGrid(); // 只在这里调用一次初始计算
+    });
   },
   methods: {
     //取消创建，返回任务列表
@@ -2325,6 +2330,10 @@ export default {
     },
     //计算网格搜索次数
     computeNumOfGrid() {
+      //添加调用栈跟踪
+      console.trace("computeNumOfGrid called");
+      console.log('调用时间:', new Date().toLocaleTimeString());
+
       const computeList = [];
       this.computeNumString = "";
       this.gridSearchError = false; // 重置错误标志位

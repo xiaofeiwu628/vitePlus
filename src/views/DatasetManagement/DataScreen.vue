@@ -638,17 +638,26 @@ export default {
   },
   setup() {
     const router = useRouter();
-    let handleDetail = (datasetId, tableId, tableType) => {
+    let handleDetail = (datasetId, tableId, tableType, tableName) => {
       //数据表详情
       if (tableType === ".json") {
         router.push({
           path: "/entityView",
           query: { datasetId, tableId },
         });
-      } else if(tableType === ".csv") {
+      } else if(tableType === ".csv" || tableType === ".sql") {
+        // SQL 文件也使用 dataView 页面查看
         router.push({
           path: "/dataView",
-          query: { datasetId, tableId },
+          query: { datasetId, tableId, fileType: tableType },
+        });
+      } else {
+        // 处理其他未知类型
+        console.warn(`未支持的文件类型: ${tableType}`);
+        ElMessage({
+          message: `暂不支持查看 ${tableType} 类型的文件`,
+          type: 'warning',
+          offset: 60
         });
       }
     };
