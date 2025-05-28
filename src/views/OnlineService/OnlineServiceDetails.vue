@@ -38,7 +38,7 @@
             </el-form-item>
             <el-form-item label="服务状态：">
               <el-tag :type="getServiceStateType" size="small">
-                {{ this.serviceStateDic[formOfBaseInformation.serviceState] }}
+                {{ serviceStateText }}
               </el-tag>
             </el-form-item>
             <el-form-item label="创建时间：">
@@ -46,7 +46,7 @@
             </el-form-item>
             <el-form-item label="部署方式：">
               <el-tag type="info" size="small">
-                {{ serviceTypeDic[formOfBaseInformation.serviceType] }}
+                {{ serviceTypeText }}
               </el-tag>
             </el-form-item>
             <el-form-item label="服务描述：">
@@ -225,143 +225,246 @@
   </div>
 </template>
 
+<script setup lang="ts">
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { ArrowRight, Document, Cpu, Memo } from '@element-plus/icons-vue'
+import request from '@/utils/request'
 
-<script>
-import { useRoute } from 'vue-router';
-import request from "@/utils/request";
-import { ArrowRight, Document, Cpu, Memo } from '@element-plus/icons-vue';
-import { ElMessage } from "element-plus";
-
-export default {
-  name: "OnlineServiceDetails",
-  data() {
-    return {
-      formOfBaseInformation: {},
-      modelInformationTableData: [],
-      imageInformationTableData: [],
-      formOfRequestDesc: {},
-      headerTableData: [
-        {
-          name: 'Token',
-          value: localStorage.getItem("token"),
-        }
-      ],
-      bodyRequestBody: [
-        {
-          param: 'data',
-          required: '是',
-          type: 'Array',
-          desc: '待预测数据，每条待预测数据是由各个特征及其取值构成的键值对的集合'
-        }
-      ],
-      taskID: '',
-      historyID: '',
-      version: '',
-      ArrowRight,
-      Document,
-      Cpu,
-      Memo,
-      specificDesc1: {},
-      specificDesc2: {},
-      serviceId: '',
-      formOfResource: {},
-      serviceStateDic: {
-        running: '运行中',
-        stoped: '停止',
-        exited: '停止',
-        error: '未知异常',
-        error_connection: '连接异常',
-        error_starting: '启动异常',
-        error_running: '运行异常',
-        waiting: '等待资源',
-        starting: '部署中',
-      },
-      serviceTypeDic: {
-        custom: '镜像部署',
-        official: '模型部署',
-      },
-      tableHeaderStyle: {
-        background: '#f0f5fa',
-        color: '#1a2942',
-        fontSize: '14px',
-        fontWeight: '600',
-        textAlign: 'center',
-        padding: '12px 0',
-        borderBottom: '2px solid #4c75a3',
-      },
-      tableCellStyle: {
-        textAlign: 'center',
-        fontSize: '14px',
-        padding: '10px 0',
-        color: '#303133'
-      }
-    }
-  },
-  computed: {
-    getServiceStateType() {
-      const stateMap = {
-        running: 'success',
-        stoped: 'info',
-        exited: 'info',
-        error: 'danger',
-        error_connection: 'danger',
-        error_starting: 'danger',
-        error_running: 'danger',
-        waiting: 'warning',
-        starting: 'warning',
-      };
-      return stateMap[this.formOfBaseInformation.serviceState] || 'info';
-    }
-  },
-  created() {
-    const route = useRoute();
-    this.taskID = route.query.taskId;
-    this.historyID = route.query.historyId;
-    this.version = route.query.version;
-    this.serviceId = route.query.serviceId;
-    this.loadServiceDetails();
-  },
-  methods: {
-    loadServiceDetails() {
-      request.get('/OnlineService/GetOnlineService', {
-        params: {
-          service_id: this.serviceId
-        }
-      }).then(res => {
-        let middle = {}
-        this.formOfBaseInformation['serviceName'] = res.data.service_name;
-        this.formOfBaseInformation['serviceId'] = res.data.service_id;
-        this.formOfBaseInformation['serviceState'] = res.data.service_state;
-        this.formOfBaseInformation['createTime'] = res.data.create_time;
-        this.formOfBaseInformation['desc'] = res.data.service_desc;
-        this.formOfBaseInformation['serviceType'] = res.data.service_type;
-        if (res.data.service_type === 'custom') {
-          middle['imageName'] = res.data.image_version_data.image_name;
-          middle['imageVersionId'] = res.data.image_version_data.image_version_id;
-          middle['tag'] = res.data.image_version_data.tag;
-          middle['imageId'] = res.data.image_version_data.image_id;
-          this.imageInformationTableData.push(middle);
-        } else if (res.data.service_type === 'official') {
-          middle['modelName'] = res.data.model_data.model_name;
-          middle['modelId'] = res.data.model_id;
-          middle['taskId'] = res.data.task_id;
-          middle['taskHistoryId'] = res.data.task_history_id;
-          middle['isPublic'] = res.data.model_data.is_public === '1' ? '公开' : '不公开';
-          this.modelInformationTableData.push(middle);
-        } else {
-          ElMessage({message: '参数异常！', type: 'error', offset: 60})
-        }
-        this.formOfResource['memory'] = (res.data.memory / 1000000000) + 'GB';
-        this.formOfResource['cpuCoresNum'] = res.data.cpu_cores_num;
-        this.formOfRequestDesc.url = res.data.kong_url;
-        this.specificDesc1 = JSON.parse(JSON.stringify(res.data.request_data));
-        console.log(this.specificDesc1, 'specificDesc1')
-        console.log(res.data, 'res.data in loadServiceDetails');
-        console.log(this.modelInformationTableData, 'modelInformationTableData in loadServiceDetails');
-      })
-    }
-  }
+// 类型定义
+interface BaseInformation {
+  serviceName?: string
+  serviceId?: string
+  serviceState?: string
+  createTime?: string
+  desc?: string
+  serviceType?: string
 }
+
+interface ModelInformation {
+  modelName: string
+  modelId: string
+  taskId: string
+  taskHistoryId: string
+  isPublic: string
+}
+
+interface ImageInformation {
+  imageName: string
+  imageId: string
+  imageVersionId: string
+  tag: string
+}
+
+interface RequestDesc {
+  url?: string
+}
+
+interface ResourceInfo {
+  memory?: string
+  cpuCoresNum?: string
+}
+
+interface HeaderData {
+  name: string
+  value: string
+}
+
+interface BodyRequestData {
+  param: string
+  required: string
+  type: string
+  desc: string
+}
+
+interface ServiceDetailResponse {
+  service_name: string
+  service_id: string
+  service_state: string
+  create_time: string
+  service_desc: string
+  service_type: string
+  image_version_data?: {
+    image_name: string
+    image_version_id: string
+    tag: string
+    image_id: string
+  }
+  model_data?: {
+    model_name: string
+    is_public: string
+  }
+  model_id?: string
+  task_id?: string
+  task_history_id?: string
+  memory: number
+  cpu_cores_num: string
+  kong_url: string
+  request_data: any
+}
+
+// 路由实例
+const route = useRoute()
+
+// 响应式数据
+const formOfBaseInformation = reactive<BaseInformation>({})
+const modelInformationTableData = ref<ModelInformation[]>([])
+const imageInformationTableData = ref<ImageInformation[]>([])
+const formOfRequestDesc = reactive<RequestDesc>({})
+const formOfResource = reactive<ResourceInfo>({})
+const specificDesc1 = ref<any>({})
+const specificDesc2 = ref<any>({})
+
+// 基础数据
+const taskID = ref<string>('')
+const historyID = ref<string>('')
+const version = ref<string>('')
+const serviceId = ref<string>('')
+
+// 表格数据
+const headerTableData = ref<HeaderData[]>([
+  {
+    name: 'Token',
+    value: localStorage.getItem("token") || '',
+  }
+])
+
+const bodyRequestBody = ref<BodyRequestData[]>([
+  {
+    param: 'data',
+    required: '是',
+    type: 'Array',
+    desc: '待预测数据，每条待预测数据是由各个特征及其取值构成的键值对的集合'
+  }
+])
+
+// 字典数据
+const serviceStateDic: Record<string, string> = {
+  running: '运行中',
+  stoped: '停止',
+  exited: '停止',
+  error: '未知异常',
+  error_connection: '连接异常',
+  error_starting: '启动异常',
+  error_running: '运行异常',
+  waiting: '等待资源',
+  starting: '部署中',
+}
+
+const serviceTypeDic: Record<string, string> = {
+  custom: '镜像部署',
+  official: '模型部署',
+}
+
+// 表格样式
+const tableHeaderStyle = {
+  background: '#f0f5fa',
+  color: '#1a2942',
+  fontSize: '14px',
+  fontWeight: '600',
+  textAlign: 'center',
+  padding: '12px 0',
+  borderBottom: '2px solid #4c75a3',
+}
+
+const tableCellStyle = {
+  textAlign: 'center',
+  fontSize: '14px',
+  padding: '10px 0',
+  color: '#303133'
+}
+
+// 计算属性
+const getServiceStateType = computed(() => {
+  const stateMap: Record<string, string> = {
+    running: 'success',
+    stoped: 'info',
+    exited: 'info',
+    error: 'danger',
+    error_connection: 'danger',
+    error_starting: 'danger',
+    error_running: 'danger',
+    waiting: 'warning',
+    starting: 'warning',
+  }
+  return stateMap[formOfBaseInformation.serviceState || ''] || 'info'
+})
+// 服务状态和类型文本
+const serviceStateText = computed(() => {
+  const state = formOfBaseInformation.serviceState
+  return state ? (serviceStateDic[state] || '未知状态') : '未知状态'
+})
+// 服务类型文本
+const serviceTypeText = computed(() => {
+  const type = formOfBaseInformation.serviceType
+  return type ? (serviceTypeDic[type] || '未知类型') : '未知类型'
+})
+
+// 方法定义
+const loadServiceDetails = (): void => {
+  request.get('/OnlineService/GetOnlineService', {
+    params: {
+      service_id: serviceId.value
+    }
+  }).then((res: { data: ServiceDetailResponse }) => {
+    let middle: any = {}
+    
+    // 基本信息
+    formOfBaseInformation.serviceName = res.data.service_name
+    formOfBaseInformation.serviceId = res.data.service_id
+    formOfBaseInformation.serviceState = res.data.service_state
+    formOfBaseInformation.createTime = res.data.create_time
+    formOfBaseInformation.desc = res.data.service_desc
+    formOfBaseInformation.serviceType = res.data.service_type
+    
+    // 根据服务类型处理不同的信息
+    if (res.data.service_type === 'custom') {
+      // 镜像信息
+      if (res.data.image_version_data) {
+        middle['imageName'] = res.data.image_version_data.image_name
+        middle['imageVersionId'] = res.data.image_version_data.image_version_id
+        middle['tag'] = res.data.image_version_data.tag
+        middle['imageId'] = res.data.image_version_data.image_id
+        imageInformationTableData.value.push(middle)
+      }
+    } else if (res.data.service_type === 'official') {
+      // 模型信息
+      if (res.data.model_data) {
+        middle['modelName'] = res.data.model_data.model_name
+        middle['modelId'] = res.data.model_id
+        middle['taskId'] = res.data.task_id
+        middle['taskHistoryId'] = res.data.task_history_id
+        middle['isPublic'] = res.data.model_data.is_public === '1' ? '公开' : '不公开'
+        modelInformationTableData.value.push(middle)
+      }
+    } else {
+      ElMessage({ message: '参数异常！', type: 'error', offset: 60 })
+    }
+    
+    // 资源信息
+    formOfResource.memory = (res.data.memory / 1000000000) + 'GB'
+    formOfResource.cpuCoresNum = res.data.cpu_cores_num
+    
+    // 请求信息
+    formOfRequestDesc.url = res.data.kong_url
+    specificDesc1.value = JSON.parse(JSON.stringify(res.data.request_data))
+    
+    console.log(specificDesc1.value, 'specificDesc1')
+    console.log(res.data, 'res.data in loadServiceDetails')
+    console.log(modelInformationTableData.value, 'modelInformationTableData in loadServiceDetails')
+  })
+}
+
+// 组件挂载时执行
+onMounted(() => {
+  taskID.value = route.query.taskId as string || ''
+  historyID.value = route.query.historyId as string || ''
+  version.value = route.query.version as string || ''
+  serviceId.value = route.query.serviceId as string || ''
+  
+  loadServiceDetails()
+})
 </script>
 
 <style scoped>

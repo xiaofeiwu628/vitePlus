@@ -255,344 +255,403 @@
   </div>
 </template>
 
-<script>
-import router from "@/router";
-import MyChart from "@/components/MyChart.vue";
-import { Search, Refresh, ArrowRight, Monitor, Plus, QuestionFilled, Document, DataAnalysis, InfoFilled, WarningFilled } from '@element-plus/icons-vue';
-import request from "@/utils/request";
-import { ElMessage } from "element-plus";
-import { serviceStart, serviceStop, serviceDelete } from "@/utils/before";
-import { useRoute } from "vue-router";
+<script setup lang="ts">
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import {
+  Search,
+  Refresh,
+  ArrowRight,
+  Monitor,
+  Plus,
+  QuestionFilled,
+  Document,
+  DataAnalysis,
+  InfoFilled,
+  WarningFilled
+} from '@element-plus/icons-vue'
+import MyChart from '@/components/MyChart.vue'
+import request from '@/utils/request'
+import { serviceStart, serviceStop, serviceDelete } from '@/utils/before'
 
-export default {
-  name: "ServiceList",
-  components: {
-    Search,
-    Refresh,
-    ArrowRight,
-    Monitor,
-    Plus,
-    QuestionFilled,
-    Document,
-    DataAnalysis,
-    InfoFilled,
-    WarningFilled
-  },
-  data(){
-    return{
-      ArrowRight,
-      Monitor,
-      serviceListData:[],
-      Search,
-      serviceLoading:false,
-      selectInputByServiceState:'服务状态',
-      serviceStateList:[
-        {
-          value:'',
-          label:'全部'
-        },
-        {
-          value:'running',
-          label:'运行中'
-        },
-        // {
-        //   value:'stoped',
-        //   label:'停止'
-        // },
-        {
-          value:'exited',
-          label:'停止'
-        },
-        {
-          value:'error',
-          label:'异常'
-        },
-        {
-          value:'waiting',
-          label:'等待资源'
-        },
-        {
-          value:'starting',
-          label:'部署中'
-        }
-      ],
-      serviceStateDic:{
-        running:'运行中',
-        stoped:'停止',
-        exited:'停止',
-        error:'未知异常',
-        error_connection:'连接异常',
-        error_starting:'启动异常',
-        error_running:'运行异常',
-        waiting:'等待资源',
-        starting:'部署中',
-      },
-      selectInputByServiceName:'',
-      deleteServiceDialog:false,
-      accessDialog:false,
-      serviceAccessLoading:false,
-      serviceAccessData:[],
-      visualType:'list',
-      chartData:{//图表数据
-        fName: '',//标题名
-        GraphType: '',//图表类型
-        ydata: [],//折线图与直方图y轴数据
-        xdata: [],//直方图x轴数据
-        piedata: [],//饼图数据,
-
-      },
-      deployType:{
-        custom:'镜像部署',
-        official:'模型部署'
-      }
-    }
-  },
-  components:{
-    QuestionFilled,
-    MyChart,
-  },
-  created() {
-    const route = useRoute();
-    if(route.query.serviceId){
-      console.log(route.query.serviceId,'route.query.serviceId')
-      let serviceId = route.query.serviceId;
-      let middle = {service_id:serviceId};
-      this.loadOnlineService(middle,1000);
-    }else{
-      this.loadOnlineService(null,1000);
-    }
-    // this.loadOnlineService(null,1000);
-    // this.$store.commit('changeOnlineServiceStep','');
-  },
-  methods:{
-    // 根据状态获取服务列表
-    getServicesByState(state) {
-      return this.serviceListData.filter(service => {
-        if (state === 'exited') {
-          return service.service_state === 'exited' || service.service_state === 'stoped';
-        }
-        return service.service_state === state;
-      });
-    },
-
-    // 获取标签类型
-    getTagType(state) {
-      if (state === 'running') {
-        return 'success';
-      } else if (state === 'waiting' || state === 'starting') {
-        return 'warning';
-      } else if (state === 'error' || state === 'error_connection' || state === 'error_starting' || state === 'error_running') {
-        return 'danger';
-      } else {
-        return 'info';
-      }
-    },
-    //跳转到模型部署界面
-    onlineServiceDeploy(){
-      router.push('/onlineServiceDeploy');
-    },
-    //加载在线服务列表
-    loadOnlineService(param,time){
-      this.serviceLoading = true;
-      setTimeout(()=>{
-        request.get('OnlineService/GetOnlineServiceList',{
-          params:param ? param : {}
-        }).then(res=>{
-          this.serviceListData = res.data;
-          this.serviceListData.forEach(item=>{
-            item.create_time = item.create_time.split('.')[0]
-          })
-          this.serviceLoading = false;
-          console.log(res.data,'res.data in loadOnlineService')
-        }).catch(err=>{
-          ElMessage({
-            message:"加载失败！",
-            type:'error',
-            offset:60
-          });
-          this.serviceLoading = false;
-        })
-      },time ? time : 1000)
-
-    },
-    //在线服务的访问情况
-    openAccessDialog(param){
-      this.accessDialog = true;
-      this.serviceAccessLoading = true;
-      this.chartData.fName = param.service_name;
-      request.get('/OnlineService/GetOnlineServiceLog',{
-        params:param ? param : {}
-      }).then(res=>{
-        this.serviceAccessData = res.data.logList;
-        this.chartData.xdata = res.data.timeDistribution.XData;
-        this.chartData.ydata = res.data.timeDistribution.YData;
-        this.chartData.GraphType = 'HistogramService';
-        console.log(res.data,'data')
-        this.serviceAccessLoading = false;
-      })
-    },
-    //根据服务的名字模糊查询
-    selectByServiceName(){
-      let middle = {service_name:this.selectInputByServiceName};
-      this.loadOnlineService(middle);
-    },
-    //根据服务的状态筛选
-    selectByServiceState(){
-      let middle = {};
-      console.log(this.selectInputByServiceState)
-      if(this.selectInputByServiceState === 'exited'){
-        middle = {service_state:'stoped,exited'}
-        console.log('ss')
-      }else{
-        middle = {service_state:this.selectInputByServiceState};
-      }
-
-      this.loadOnlineService(middle);
-    },
-    changeVisual(val){
-      this.visualType = val;
-    },
-    //查看访问情况统计
-    toLogVisualization(param){
-      console.log(param.task_id,'param.task_id');
-      console.log(param.task_history_id,'param.task_history_id');
-      router.push({path:'/onlineServiceLogVisualization',query:{serviceId:param.service_id}})
-    },
-    //查看服务的详情
-    toDetails(param){
-      console.log(param.task_id,'param.task_id');
-      console.log(param.task_history_id,'param.task_history_id');
-      console.log(param.model_version,'param.model_version');
-      router.push({path:'/onlineServiceDetails',query:{serviceId:param.service_id}})
-    },
-    //查看服务的日志
-    toLog(param){
-      router.push({path:'/onlineServiceLog',query:{serviceId:param.service_id,serviceName:param.service_name,serviceState:param.service_state}})
-    },
-    //启动服务
-    startService(param){
-      const data = {service_id:param.service_id};
-      serviceStart(data).then(res=>{
-        this.loadOnlineService(null,6000);
-        setTimeout(()=>{
-          ElMessage({
-            message:'启动成功！',
-            type:'success',
-            offset:60
-          });
-        },6000)
-      }).catch(err=>{
-        ElMessage({
-          message:'启动失败！',
-          type:'error',
-          offset:60
-        });
-      })
-    },
-    //停止服务
-    stopService(param){
-      const data = {service_id:param.service_id};
-      serviceStop(data).then(res=>{
-        this.loadOnlineService(null,4000);
-        setTimeout(()=>{
-          ElMessage({
-            message:'停止成功！',
-            type:'success',
-            offset:60
-          });
-        },4000)
-      }).catch(err=>{
-        ElMessage({
-          message:'停止失败！',
-          type:'error',
-          offset:60
-        });
-      })
-    },
-    //删除服务
-    deleteService(param){
-      const data = {service_id:param.service_id};
-      console.log(data,'data in delete')
-      serviceDelete(data).then(res=>{
-        this.loadOnlineService(null,1000);
-        setTimeout(()=>{
-          ElMessage({
-            message:'删除成功！',
-            type:'success',
-            offset:60
-          });
-        },1000)
-      }).catch(err=>{
-        ElMessage({
-          message:'删除失败！',
-          type:'error',
-          offset:60
-        });
-      })
-    },
-    //设置启动style
-    setStartStyle(param){
-      if (param.service_state === 'running' || param.service_state === 'waiting') {
-        return {"width": "25%","background-color": "#B9DAA7", "color": "white"}
-      }else {
-        return {"width": "25%","background-color": "#60B04F", "color": "white"}
-      }
-    },
-    //设置停止style
-    setStopStyle(param){
-      if (param.service_state !== 'running' && param.service_state !== 'waiting') {
-        return {"width": "25%","background-color": "#E29194", "color": "white"}
-      }else {
-        return {"width": "25%","background-color": "#CD353B", "color": "white"}
-      }
-    },
-    //设置删除style
-    setDeleteStyle(param){
-      if (param.service_state !== 'running' && param.service_state !== 'waiting') {
-        return {"width": "25%","background-color": "#CD353B", "color": "white"}
-      }else {
-        return {"width": "25%","background-color": "#E29194", "color": "white"}
-      }
-    },
-
-    //设置状态style
-    setStateStyle(param) {
-      if (param === '运行中' || param === 'running') {
-        return {"background-color": "#409eff", "color": "white","width":"80px"}
-      } else if (param === '部署中' || param === 'starting') {
-        return {"background-color": "#69B0E9", "color": "white","width":"80px"}
-      } else if (param === '停止' || param === 'stoped' || param === 'exited') {
-        return {"background-color": "#E29194", "color": "white","width":"80px"}
-      } else if (param === '异常' || param === 'error'|| param === 'error_connection' || param === 'error_starting' || param === 'error_running'){
-        return {"background-color": "#CD353B", "color": "white","width":"80px"}
-      } else if (param === '等待部署' || param === 'waiting'){
-        return {"background-color": "#00CED1", "color": "white","width":"80px"}
-      }
-    },
-    //设置启动按钮不可用
-    setStartDisabled(param){
-      return (param.service_state === 'running' || param.service_state === 'waiting');
-    },
-    //设置暂停按钮不可用
-    setStopDisabled(param){
-      return (param.service_state !== 'running' && param.service_state !== 'waiting');
-    },
-    //设置删除按钮不可用
-    setDeleteDisabled(param){
-      return (param.service_state === 'running' || param.service_state === 'waiting');
-    },
-    //点击对应模型ID跳转到模型仓库
-    toHouse(param){
-      if(param.service_type === 'custom'){
-        router.push({path:'imageList',query:{imageVersionId:param.image_version_id}})
-      }else if(param.service_type === 'official'){
-        router.push({path:'modelList',query:{modelId:param.model_id}})
-      }
-
-    },
-  },
-
+// 类型定义
+interface ServiceItem {
+  service_id: string
+  service_name: string
+  service_state: string
+  service_type: string
+  model_id?: string
+  image_version_id?: string
+  create_time: string
+  task_id?: string
+  task_history_id?: string
+  model_version?: string
 }
+
+interface ServiceStateOption {
+  value: string
+  label: string
+}
+
+interface ChartData {
+  fName: string
+  GraphType: string
+  ydata: any[]
+  xdata: any[]
+  piedata: any[]
+}
+
+interface ServiceAccessData {
+  online_service_log_id: string
+  response_status: string
+  status_code: string
+  response_duration: string
+  request_start_time: string
+  request_end_time: string
+}
+
+// 路由实例
+const router = useRouter()
+const route = useRoute()
+
+// 响应式数据
+const serviceListData = ref<ServiceItem[]>([])
+const serviceLoading = ref<boolean>(false)
+const selectInputByServiceState = ref<string>('服务状态')
+const selectInputByServiceName = ref<string>('')
+const deleteServiceDialog = ref<boolean>(false)
+const accessDialog = ref<boolean>(false)
+const serviceAccessLoading = ref<boolean>(false)
+const serviceAccessData = ref<ServiceAccessData[]>([])
+const visualType = ref<string>('list')
+
+// 服务状态列表
+const serviceStateList: ServiceStateOption[] = [
+  {
+    value: '',
+    label: '全部'
+  },
+  {
+    value: 'running',
+    label: '运行中'
+  },
+  {
+    value: 'exited',
+    label: '停止'
+  },
+  {
+    value: 'error',
+    label: '异常'
+  },
+  {
+    value: 'waiting',
+    label: '等待资源'
+  },
+  {
+    value: 'starting',
+    label: '部署中'
+  }
+]
+
+// 服务状态字典
+const serviceStateDic: Record<string, string> = {
+  running: '运行中',
+  stoped: '停止',
+  exited: '停止',
+  error: '未知异常',
+  error_connection: '连接异常',
+  error_starting: '启动异常',
+  error_running: '运行异常',
+  waiting: '等待资源',
+  starting: '部署中',
+}
+
+// 部署类型字典
+const deployType: Record<string, string> = {
+  custom: '镜像部署',
+  official: '模型部署'
+}
+
+// 图表数据
+const chartData = reactive<ChartData>({
+  fName: '', //标题名
+  GraphType: '', //图表类型
+  ydata: [], //折线图与直方图y轴数据
+  xdata: [], //直方图x轴数据
+  piedata: [], //饼图数据
+})
+
+// 计算属性和方法
+// 根据状态获取服务列表
+const getServicesByState = (state: string): ServiceItem[] => {
+  return serviceListData.value.filter(service => {
+    if (state === 'exited') {
+      return service.service_state === 'exited' || service.service_state === 'stoped'
+    }
+    return service.service_state === state
+  })
+}
+
+// 获取标签类型
+const getTagType = (state: string): string => {
+  if (state === 'running') {
+    return 'success'
+  } else if (state === 'waiting' || state === 'starting') {
+    return 'warning'
+  } else if (state === 'error' || state === 'error_connection' || state === 'error_starting' || state === 'error_running') {
+    return 'danger'
+  } else {
+    return 'info'
+  }
+}
+
+//跳转到模型部署界面
+const onlineServiceDeploy = (): void => {
+  router.push('/onlineServiceDeploy')
+}
+
+//加载在线服务列表
+const loadOnlineService = (param?: any, time?: number): void => {
+  serviceLoading.value = true
+  setTimeout(() => {
+    request.get('OnlineService/GetOnlineServiceList', {
+      params: param ? param : {}
+    }).then((res: any) => {
+      serviceListData.value = res.data
+      serviceListData.value.forEach(item => {
+        item.create_time = item.create_time.split('.')[0]
+      })
+      serviceLoading.value = false
+      console.log(res.data, 'res.data in loadOnlineService')
+    }).catch((err: any) => {
+      ElMessage({
+        message: "加载失败！",
+        type: 'error',
+        offset: 60
+      })
+      serviceLoading.value = false
+    })
+  }, time ? time : 1000)
+}
+
+//在线服务的访问情况
+// const openAccessDialog = (param: any): void => {
+//   accessDialog.value = true
+//   serviceAccessLoading.value = true
+//   chartData.fName = param.service_name
+//   request.get('/OnlineService/GetOnlineServiceLog', {
+//     params: param ? param : {}
+//   }).then((res: any) => {
+//     serviceAccessData.value = res.data.logList
+//     chartData.xdata = res.data.timeDistribution.XData
+//     chartData.ydata = res.data.timeDistribution.YData
+//     chartData.GraphType = 'HistogramService'
+//     console.log(res.data, 'data')
+//     serviceAccessLoading.value = false
+//   })
+// }
+
+//根据服务的名字模糊查询
+const selectByServiceName = (): void => {
+  const middle = { service_name: selectInputByServiceName.value }
+  loadOnlineService(middle)
+}
+
+//根据服务的状态筛选
+const selectByServiceState = (): void => {
+  let middle: any = {}
+  console.log(selectInputByServiceState.value)
+  if (selectInputByServiceState.value === 'exited') {
+    middle = { service_state: 'stoped,exited' }
+    console.log('ss')
+  } else {
+    middle = { service_state: selectInputByServiceState.value }
+  }
+  loadOnlineService(middle)
+}
+
+const changeVisual = (val: string): void => {
+  visualType.value = val
+}
+
+//查看访问情况统计
+const toLogVisualization = (param: ServiceItem): void => {
+  console.log(param.task_id, 'param.task_id')
+  console.log(param.task_history_id, 'param.task_history_id')
+  router.push({ path: '/onlineServiceLogVisualization', query: { serviceId: param.service_id } })
+}
+
+//查看服务的详情
+const toDetails = (param: ServiceItem): void => {
+  console.log(param.task_id, 'param.task_id')
+  console.log(param.task_history_id, 'param.task_history_id')
+  console.log(param.model_version, 'param.model_version')
+  router.push({ path: '/onlineServiceDetails', query: { serviceId: param.service_id } })
+}
+
+//查看服务的日志
+const toLog = (param: ServiceItem): void => {
+  router.push({
+    path: '/onlineServiceLog',
+    query: {
+      serviceId: param.service_id,
+      serviceName: param.service_name,
+      serviceState: param.service_state
+    }
+  })
+}
+
+//启动服务
+const startService = (param: ServiceItem): void => {
+  const data = { service_id: param.service_id }
+  serviceStart(data).then((res: any) => {
+    loadOnlineService(null, 6000)
+    setTimeout(() => {
+      ElMessage({
+        message: '启动成功！',
+        type: 'success',
+        offset: 60
+      })
+    }, 6000)
+  }).catch((err: any) => {
+    ElMessage({
+      message: '启动失败！',
+      type: 'error',
+      offset: 60
+    })
+  })
+}
+
+//停止服务
+const stopService = (param: ServiceItem): void => {
+  const data = { service_id: param.service_id }
+  serviceStop(data).then((res: any) => {
+    loadOnlineService(null, 4000)
+    setTimeout(() => {
+      ElMessage({
+        message: '停止成功！',
+        type: 'success',
+        offset: 60
+      })
+    }, 4000)
+  }).catch((err: any) => {
+    ElMessage({
+      message: '停止失败！',
+      type: 'error',
+      offset: 60
+    })
+  })
+}
+
+//删除服务
+const deleteService = (param: ServiceItem): void => {
+  const data = { service_id: param.service_id }
+  console.log(data, 'data in delete')
+  serviceDelete(data).then((res: any) => {
+    loadOnlineService(null, 1000)
+    setTimeout(() => {
+      ElMessage({
+        message: '删除成功！',
+        type: 'success',
+        offset: 60
+      })
+    }, 1000)
+  }).catch((err: any) => {
+    ElMessage({
+      message: '删除失败！',
+      type: 'error',
+      offset: 60
+    })
+  })
+}
+
+// //设置启动style
+// const setStartStyle = (param: ServiceItem): Record<string, string> => {
+//   if (param.service_state === 'running' || param.service_state === 'waiting') {
+//     return { "width": "25%", "background-color": "#B9DAA7", "color": "white" }
+//   } else {
+//     return { "width": "25%", "background-color": "#60B04F", "color": "white" }
+//   }
+// }
+
+// //设置停止style
+// const setStopStyle = (param: ServiceItem): Record<string, string> => {
+//   if (param.service_state !== 'running' && param.service_state !== 'waiting') {
+//     return { "width": "25%", "background-color": "#E29194", "color": "white" }
+//   } else {
+//     return { "width": "25%", "background-color": "#CD353B", "color": "white" }
+//   }
+// }
+
+// //设置删除style
+// const setDeleteStyle = (param: ServiceItem): Record<string, string> => {
+//   if (param.service_state !== 'running' && param.service_state !== 'waiting') {
+//     return { "width": "25%", "background-color": "#CD353B", "color": "white" }
+//   } else {
+//     return { "width": "25%", "background-color": "#E29194", "color": "white" }
+//   }
+// }
+
+// //设置状态style
+// const setStateStyle = (param: string): Record<string, string> => {
+//   if (param === '运行中' || param === 'running') {
+//     return { "background-color": "#409eff", "color": "white", "width": "80px" }
+//   } else if (param === '部署中' || param === 'starting') {
+//     return { "background-color": "#69B0E9", "color": "white", "width": "80px" }
+//   } else if (param === '停止' || param === 'stoped' || param === 'exited') {
+//     return { "background-color": "#E29194", "color": "white", "width": "80px" }
+//   } else if (param === '异常' || param === 'error' || param === 'error_connection' || param === 'error_starting' || param === 'error_running') {
+//     return { "background-color": "#CD353B", "color": "white", "width": "80px" }
+//   } else if (param === '等待部署' || param === 'waiting') {
+//     return { "background-color": "#00CED1", "color": "white", "width": "80px" }
+//   }
+//   return {}
+// }
+
+//设置启动按钮不可用
+const setStartDisabled = (param: ServiceItem): boolean => {
+  return (param.service_state === 'running' || param.service_state === 'waiting')
+}
+
+//设置暂停按钮不可用
+const setStopDisabled = (param: ServiceItem): boolean => {
+  return (param.service_state !== 'running' && param.service_state !== 'waiting')
+}
+
+//设置删除按钮不可用
+const setDeleteDisabled = (param: ServiceItem): boolean => {
+  return (param.service_state === 'running' || param.service_state === 'waiting')
+}
+
+//点击对应模型ID跳转到模型仓库
+const toHouse = (param: ServiceItem): void => {
+  if (param.service_type === 'custom') {
+    router.push({ path: 'imageList', query: { imageVersionId: param.image_version_id } })
+  } else if (param.service_type === 'official') {
+    router.push({ path: 'modelList', query: { modelId: param.model_id } })
+  }
+}
+
+// 删除确认（注意：原代码中有 singleConfirm 方法但未实现）
+const singleConfirm = (): void => {
+  // 这个方法在原代码中被引用但未实现，需要根据实际需求补充
+  deleteServiceDialog.value = false
+}
+
+// 组件挂载时的逻辑
+onMounted(() => {
+  if (route.query.serviceId) {
+    console.log(route.query.serviceId, 'route.query.serviceId')
+    const serviceId = route.query.serviceId as string
+    const middle = { service_id: serviceId }
+    loadOnlineService(middle, 1000)
+  } else {
+    loadOnlineService(null, 1000)
+  }
+  // this.loadOnlineService(null,1000);
+  // this.$store.commit('changeOnlineServiceStep','');
+})
 </script>
 
 <style scoped>

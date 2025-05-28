@@ -492,418 +492,500 @@
   </div>
 </template>
 
-<script>
-import router from "@/router";
-import request from "@/utils/request";
-import {ref} from "vue";
+<script setup lang="ts">
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, FormInstance } from 'element-plus'
 import { 
   ArrowRight, Delete, Plus, Right, Connection, 
   Document, InfoFilled, Setting, Ship, MagicStick
-} from '@element-plus/icons-vue';
-import { dictionaryC2E } from '../AutoModel/taskStaticData';
-import { useRoute } from 'vue-router';
-import { serviceDeploy, imageDeploy } from "@/utils/before";
-import {ElMessage} from "element-plus";
+} from '@element-plus/icons-vue'
+import { dictionaryC2E } from '../AutoModel/taskStaticData'
+import { serviceDeploy, imageDeploy } from "@/utils/before"
+import request from "@/utils/request"
 
-export default {
-  name: "OnlineServiceDeploy",
-  data(){
-    const C2E = dictionaryC2E;
-    return{
-      formOfServiceConfig:{
-        serviceName:'',
-        serviceDesc:'',
-        deployMode:'模型部署',
-      },
-      formOfModelSelection:{
-        source:'我的模型',
-        taskType:'时间序列预测',
-        modelName:''
-      },
-      formOfImageSelection:{
-        source:'我的镜像',
-        imageName:'',
-        tag:'',
-      },
-      formOfSourceConfig:{
-        memory:2,
-        cpuCoresNum:2
-      },
-      formOfContainerConfig:{
-        servicePort:'',
-      },
-      modelInRepositoryList:[],
-      imageInRepositoryList:[],
-      imageVersionList:[],
-      ArrowRight,
-      Right,
-      Delete,
-      Plus,
-      Connection,
-      Document,
-      InfoFilled,
-      Setting,
-      Ship,
-      MagicStick,
+// 类型定义
+interface ServiceConfig {
+  serviceName: string
+  serviceDesc: string
+  deployMode: string
+}
 
-      taskTypeList:['时间序列预测','回归','分类','命名实体识别'],
-      C2E,
-      mode:'modelCommon',
-      task_id:'',
-      task_history_id:'',
-      rules:{
-        serviceName:[{required:true,message:'请输入服务名称！'}],
-        modelName:[{required:true,message:'请选择模型名称！',trigger:'change'}],
-        imageName:[{required:true,message:'请选择镜像名称！',trigger:'change'}],
-        tag:[{required:true,message:'请选择版本号！',trigger:'change'}],
-        servicePort:[{required:true,message:'请填写服务端口号！',trigger:'change'}],
-      },
-      fullscreenLoading:false,
-      environment:[],
+interface ModelSelection {
+  source: string
+  taskType: string
+  modelName: string
+  modelId?: string
+}
+
+interface ImageSelection {
+  source: string
+  imageName: string
+  tag: string
+  imageId?: string
+  tagId?: string
+}
+
+interface SourceConfig {
+  memory: number
+  cpuCoresNum: number
+}
+
+interface ContainerConfig {
+  servicePort: string | number
+}
+
+interface ModelInRepository {
+  model_id: number
+  model_name: string
+  model_state: string
+  task_id: number
+  task_history_id: number
+}
+
+interface ImageInRepository {
+  image_id: number
+  image_name: string
+  image_version: ImageVersion[]
+}
+
+interface ImageVersion {
+  image_version_id: number
+  tag: string
+  is_used: number
+}
+
+interface EnvironmentItem {
+  index: number
+  name: string
+  value: string
+}
+
+interface ValidationRules {
+  serviceName: Array<{ required: boolean; message: string }>
+  modelName: Array<{ required: boolean; message: string; trigger: string }>
+  imageName: Array<{ required: boolean; message: string; trigger: string }>
+  tag: Array<{ required: boolean; message: string; trigger: string }>
+  servicePort: Array<{ required: boolean; message: string; trigger: string }>
+}
+
+// 路由实例
+const route = useRoute()
+const router = useRouter()
+
+// 表单引用
+const serviceInfoRef = ref<FormInstance>()
+const modelSelectRef = ref<FormInstance>()
+const imageSelectRef = ref<FormInstance>()
+const containerConfigRef = ref<FormInstance>()
+
+// 响应式数据
+const formOfServiceConfig = reactive<ServiceConfig>({
+  serviceName: '',
+  serviceDesc: '',
+  deployMode: '模型部署',
+})
+
+const formOfModelSelection = reactive<ModelSelection>({
+  source: '我的模型',
+  taskType: '时间序列预测',
+  modelName: ''
+})
+
+const formOfImageSelection = reactive<ImageSelection>({
+  source: '我的镜像',
+  imageName: '',
+  tag: '',
+})
+
+const formOfSourceConfig = reactive<SourceConfig>({
+  memory: 2,
+  cpuCoresNum: 2
+})
+
+const formOfContainerConfig = reactive<ContainerConfig>({
+  servicePort: '',
+})
+
+const modelInRepositoryList = ref<ModelInRepository[]>([])
+const imageInRepositoryList = ref<ImageInRepository[]>([])
+const imageVersionList = ref<ImageVersion[]>([])
+const environment = ref<EnvironmentItem[]>([])
+
+// 基础数据
+const taskTypeList = ref<string[]>(['时间序列预测','回归','分类','命名实体识别'])
+const C2E = dictionaryC2E
+const mode = ref<string>('modelCommon')
+const task_id = ref<string>('')
+const task_history_id = ref<string>('')
+const fullscreenLoading = ref<boolean>(false)
+
+// 验证规则
+const rules: ValidationRules = {
+  serviceName: [{ required: true, message: '请输入服务名称！' }],
+  modelName: [{ required: true, message: '请选择模型名称！', trigger: 'change' }],
+  imageName: [{ required: true, message: '请选择镜像名称！', trigger: 'change' }],
+  tag: [{ required: true, message: '请选择版本号！', trigger: 'change' }],
+  servicePort: [{ required: true, message: '请填写服务端口号！', trigger: 'change' }],
+}
+
+// 计算属性
+const isModelDeploy = computed(() => {
+  return mode.value === 'modelCommon' || mode.value === 'modelSpecific'
+})
+
+const isImageDeploy = computed(() => {
+  return mode.value === 'imageCommon' || mode.value === 'imageSpecific'
+})
+
+// 新增计算属性
+const getSelectedModelInfo = computed(() => {
+  if (mode.value === 'modelCommon' && formOfModelSelection.modelName) {
+    const selectedModel = modelInRepositoryList.value.find(
+      model => model.model_id === parseInt(formOfModelSelection.modelName)
+    )
+    return selectedModel || null
+  }
+  return null
+})
+
+const getModelApplicationScenario = computed(() => {
+  const scenarioMap: Record<string, string> = {
+    '时间序列预测': '销售预测、股价预测、用电量预测等时序数据场景',
+    '回归': '房价预测、评分预测等连续数值场景',
+    '分类': '垃圾邮件识别、情感分析、图像分类等',
+    '命名实体识别': '文本中提取人名、地名、组织名等实体信息'
+  }
+  return scenarioMap[formOfModelSelection.taskType] || '通用场景'
+})
+
+const isLightTier = computed(() => {
+  return formOfSourceConfig.memory <= 2 && 
+        formOfSourceConfig.cpuCoresNum === 1
+})
+
+const isStandardTier = computed(() => {
+  return formOfSourceConfig.memory > 2 && 
+        formOfSourceConfig.memory <= 4 && 
+        formOfSourceConfig.cpuCoresNum === 2
+})
+
+const isHighTier = computed(() => {
+  return formOfSourceConfig.memory > 4 || 
+        formOfSourceConfig.cpuCoresNum > 2
+})
+
+const estimateRPS = computed(() => {
+  // 简单估算，实际值需要根据真实模型性能调整
+  return Math.round(formOfSourceConfig.cpuCoresNum * 10 * (formOfSourceConfig.memory / 2))
+})
+
+const estimateStartupTime = computed(() => {
+  // 估算启动时间，单位秒
+  return Math.max(5, Math.round(10 - formOfSourceConfig.cpuCoresNum))
+})
+
+// 监听器
+watch(() => formOfModelSelection.taskType, (newValue, oldValue) => {
+  console.log(newValue, 'newValue')
+  console.log(oldValue, 'oldValue')
+  loadModel()
+}, { deep: true })
+
+// 方法定义
+//服务部署共有四种，modelCommon,modelSpecific,imageCommon,imageSpecific
+const checkMode = (): void => {
+  if (route.query.deployMode === 'modelSpecific') {
+    mode.value = 'modelSpecific'
+    formOfModelSelection.modelName = route.query.modelName as string
+    formOfModelSelection.modelId = route.query.modelId as string
+    task_id.value = route.query.taskId as string
+    task_history_id.value = route.query.task_history_id as string
+    console.log(formOfModelSelection, 'formOfModelSelection')
+    console.log(mode.value)
+  } else if (route.query.deployMode === 'imageSpecific') {
+    console.log(route.query)
+    mode.value = 'imageSpecific'
+    formOfImageSelection.imageName = route.query.imageName as string
+    formOfImageSelection.imageId = route.query.imageId as string
+    formOfImageSelection.tag = route.query.imageTag as string
+    formOfImageSelection.tagId = route.query.imageVersionId as string
+  } else {
+    mode.value = 'modelCommon'
+    loadModel()
+  }
+}
+
+//根据任务类型加载模型
+const loadModel = (): void => {
+  modelInRepositoryList.value = []
+  let middle = Object.keys(C2E).includes(formOfModelSelection.taskType) ? 
+    C2E[formOfModelSelection.taskType as keyof typeof C2E] : 'string'
+  request.get('/ModelRepository/GetModelList', {
+    params: {
+      task_type: middle
     }
-  },
-  created() {
-    this.checkMode();
-  },
-  watch:{
-    'formOfModelSelection.taskType':{
-      handler(newValue,oldValue){
-        console.log(newValue,'newValue')
-        console.log(oldValue,'oldValue')
-        this.loadModel();
-      },
-      deep:true
-    },
-  },
-  computed:{
-    isModelDeploy() {
-      return this.mode === 'modelCommon' || this.mode === 'modelSpecific';
-    },
-    isImageDeploy() {
-      return this.mode === 'imageCommon' || this.mode === 'imageSpecific';
-    },
-        // 新增计算属性
-    getSelectedModelInfo() {
-      if (this.mode === 'modelCommon' && this.formOfModelSelection.modelName) {
-        const selectedModel = this.modelInRepositoryList.find(
-          model => model.model_id === this.formOfModelSelection.modelName
-        );
-        return selectedModel || null;
+  }).then((res: { data: ModelInRepository[] }) => {
+    console.log(res.data, 'res.data in myModel')
+    res.data.forEach(item => {
+      if (item.model_state === 'not deployed') {
+        modelInRepositoryList.value.push(item)
       }
-      return null;
-    },
-    
-    getModelApplicationScenario() {
-      const scenarioMap = {
-        '时间序列预测': '销售预测、股价预测、用电量预测等时序数据场景',
-        '回归': '房价预测、评分预测等连续数值场景',
-        '分类': '垃圾邮件识别、情感分析、图像分类等',
-        '命名实体识别': '文本中提取人名、地名、组织名等实体信息'
-      };
-      return scenarioMap[this.formOfModelSelection.taskType] || '通用场景';
-    },
-    
-    isLightTier() {
-      return this.formOfSourceConfig.memory <= 2 && 
-            this.formOfSourceConfig.cpuCoresNum === 1;
-    },
-    
-    isStandardTier() {
-      return this.formOfSourceConfig.memory > 2 && 
-            this.formOfSourceConfig.memory <= 4 && 
-            this.formOfSourceConfig.cpuCoresNum === 2;
-    },
-    
-    isHighTier() {
-      return this.formOfSourceConfig.memory > 4 || 
-            this.formOfSourceConfig.cpuCoresNum > 2;
-    },
-    
-    estimateRPS() {
-      // 简单估算，实际值需要根据真实模型性能调整
-      return Math.round(this.formOfSourceConfig.cpuCoresNum * 10 * (this.formOfSourceConfig.memory / 2));
-    },
-    
-    estimateStartupTime() {
-      // 估算启动时间，单位秒
-      return Math.max(5, Math.round(10 - this.formOfSourceConfig.cpuCoresNum));
+    })
+    console.log(modelInRepositoryList.value, 'modelInRepositoryList')
+  })
+}
+
+const loadImage = (param?: any): void => {
+  imageInRepositoryList.value = []
+  request.get('/ImageRepository/GetImageRepositoryList', {
+    params: param ? param : {}
+  }).then((res: { data: ImageInRepository[] }) => {
+    console.log(res.data, 'data')
+    res.data.forEach(item => {
+      imageInRepositoryList.value.push(item)
+    })
+  })
+}
+
+const loadImageVersion = (param: number): void => {
+  imageVersionList.value = []
+  imageInRepositoryList.value.forEach(item => {
+    if (item.image_id === param) {
+      let data: ImageVersion[] = []
+      item.image_version.forEach(option => {
+        if (option.is_used === 0) {
+          data.push(option)
+        }
+      })
+      imageVersionList.value = data
     }
-  },
-  methods:{
-    //服务部署共有四种，modelCommon,modelSpecific,imageCommon,imageSpecific
-    checkMode(){
-      const route = useRoute();
-      if(route.query.deployMode === 'modelSpecific'){
-        this.mode = 'modelSpecific';
-        this.formOfModelSelection.modelName = route.query.modelName;
-        this.formOfModelSelection.modelId = route.query.modelId;
-        this.task_id = route.query.taskId;
-        this.task_history_id = route.query.task_history_id;
-        console.log(this.formOfModelSelection,'formOfModelSelection')
-        console.log(this.mode)
-      }else if(route.query.deployMode === 'imageSpecific'){
-        console.log(route.query)
-        this.mode = 'imageSpecific';
-        this.formOfImageSelection.imageName = route.query.imageName;
-        this.formOfImageSelection.imageId = route.query.imageId;
-        this.formOfImageSelection.tag = route.query.imageTag;
-        this.formOfImageSelection.tagId = route.query.imageVersionId;
-      }
-      else{
-        this.mode = 'modelCommon';
-        this.loadModel();
-      }
-    },
-    //根据任务类型加载模型
-    loadModel(){
-      this.modelInRepositoryList = [];
-      let middle = Object.keys(this.C2E).includes(this.formOfModelSelection.taskType) ? 
-        this.C2E[this.formOfModelSelection.taskType] : 'string';
-      request.get('/ModelRepository/GetModelList', {
-        params: {
-          task_type: middle
-        }
-      }).then(res => {
-        console.log(res.data, 'res.data in myModel');
-        res.data.forEach(item => {
-          if(item.model_state === 'not deployed'){
-            this.modelInRepositoryList.push(item)
-          }
-        });
-        console.log(this.modelInRepositoryList, 'modelInRepositoryList');
-      });
-    },
-    loadImage(param){
-      this.imageInRepositoryList = [];
-      request.get('/ImageRepository/GetImageRepositoryList', {
-        params: param ? param : {}
-      }).then(res => {
-        console.log(res.data, 'data');
-        res.data.forEach(item => {
-          this.imageInRepositoryList.push(item);
-        });
-      });
-    },
-    loadImageVersion(param){
-      this.imageVersionList = [];
-      this.imageInRepositoryList.forEach(item => {
-        if(item.image_id === param){
-          let data = [];
-          item.image_version.forEach(option => {
-            if(option.is_used === 0){
-              data.push(option);
-            }
-          });
-          this.imageVersionList = data;
-        }
-      });
-      console.log(this.imageVersionList, 'imageVersionList');
-    },
-    changeDeployMode(val){
-      if(val === '模型部署'){
-        this.mode = 'modelCommon';
-      } else if(val === '镜像部署'){
-        this.mode = 'imageCommon';
-        this.loadImage();
-      } else {
-        ElMessage({message: '选择部署方式出错', type: 'error', offset: 60});
-      }
-    },
-    //表单校验结果
-    async formValidate(){
-      let serviceErr = true;//服务名称校验
-      let modelErr = true;//模型选择校验
-      let imageErr = true;//镜像选择校验
-      let containerErr = true;//容器配置校验
-      
-      // 调试信息
-      console.log("开始验证表单...");
-      console.log("当前模式:", this.mode);
-      
-      //判断服务名称是否填写
-      await this.$refs.serviceInfoRef.validate((valid) => {
-        serviceErr = !valid;
-        console.log("服务信息验证结果:", valid);
-      });
-      
-      if(this.mode === 'modelCommon'){
-        //模型是否选择
-        await this.$refs.modelSelectRef.validate((valid) => {
-          modelErr = !valid;
-          console.log("模型选择验证结果:", valid);
-        });
+  })
+  console.log(imageVersionList.value, 'imageVersionList')
+}
 
-        if(!serviceErr && !modelErr){
-          this.modelDeployStart();
-        } else {
-          ElMessage({message: '请完善部署信息！', type: 'error', offset: 60});
-        }
-      } else if(this.mode === 'imageCommon'){
-        //镜像是否选择
-        await this.$refs.imageSelectRef.validate((valid) => {
-          imageErr = !valid;
-          console.log("镜像选择验证结果:", valid);
-        });
-        
-        //容器配置是否填写
-        await this.$refs.containerConfigRef.validate((valid) => {
-          containerErr = !valid;
-          console.log("容器配置验证结果:", valid);
-        });
+const changeDeployMode = (val: string): void => {
+  if (val === '模型部署') {
+    mode.value = 'modelCommon'
+  } else if (val === '镜像部署') {
+    mode.value = 'imageCommon'
+    loadImage()
+  } else {
+    ElMessage({ message: '选择部署方式出错', type: 'error', offset: 60 })
+  }
+}
 
-        if(!serviceErr && !imageErr && !containerErr){
-          this.imageDeployStart();
-        } else {
-          ElMessage({message: '请完善部署信息！', type: 'error', offset: 60});
-        }
-      }
-      else if(this.mode === 'imageSpecific'){
-        //容器配置是否填写
-        await this.$refs.containerConfigRef.validate((valid) => {
-          containerErr = !valid;
-          console.log("容器配置验证结果:", valid);
-        });
+//表单校验结果
+const formValidate = async (): Promise<void> => {
+  let serviceErr = true //服务名称校验
+  let modelErr = true //模型选择校验
+  let imageErr = true //镜像选择校验
+  let containerErr = true //容器配置校验
+  
+  // 调试信息
+  console.log("开始验证表单...")
+  console.log("当前模式:", mode.value)
+  
+  //判断服务名称是否填写
+  if (serviceInfoRef.value) {
+    await serviceInfoRef.value.validate((valid) => {
+      serviceErr = !valid
+      console.log("服务信息验证结果:", valid)
+    })
+  }
+  
+  if (mode.value === 'modelCommon') {
+    //模型是否选择
+    if (modelSelectRef.value) {
+      await modelSelectRef.value.validate((valid) => {
+        modelErr = !valid
+        console.log("模型选择验证结果:", valid)
+      })
+    }
 
-        if(!serviceErr && !containerErr){
-          this.imageDeployStart();
-        } else {
-          ElMessage({message: '请完善部署信息！', type: 'error', offset: 60});
-        }
-      }
-      else {//modelSpecific的情况，只需要对服务基本信息进行校验
-        if(!serviceErr){
-          this.modelDeployStart();
-        } else {
-          ElMessage({message: '请完善部署信息！', type: 'error', offset: 60});
-        }
-      }
-    },
-    //模型部署
-    modelDeployStart(){
-      const middle = {};
-      //针对某一模型部署
-      if(this.mode === 'modelSpecific'){
-        middle['model_id'] = parseInt(this.formOfModelSelection.modelId);
-        middle['task_id'] = this.task_id;
-        middle['task_history_id'] = this.task_history_id;
-        middle['service_name'] = this.formOfServiceConfig.serviceName;
-        middle['service_desc'] = this.formOfServiceConfig.serviceDesc;
-        middle['memory'] = this.formOfSourceConfig.memory * 1000000000;
-        middle['cpu_cores_num'] = this.formOfSourceConfig.cpuCoresNum;
-        middle['type'] = 'official';
-      }
-      //选择模型部署
-      else{
-        this.modelInRepositoryList.forEach(item => {
-          if(item.model_id === this.formOfModelSelection.modelName){
-            middle['model_id'] = item.model_id;
-            middle['task_id'] = item.task_id;
-            middle['task_history_id'] = item.task_history_id;
-            middle['service_name'] = this.formOfServiceConfig.serviceName;
-            middle['service_desc'] = this.formOfServiceConfig.serviceDesc;
-            middle['memory'] = this.formOfSourceConfig.memory * 1000000000;
-            middle['cpu_cores_num'] = this.formOfSourceConfig.cpuCoresNum;
-            middle['type'] = 'official';
-          }
-        });
-      }
-      
-      console.log(middle, 'middle');
-      this.fullscreenLoading = true;
-      
-      serviceDeploy(middle).then(res => {
-        console.log(res.data, 'res.data in startDeploy');
-        setTimeout(() => {
-          this.fullscreenLoading = false;
-          ElMessage({message: '部署成功！', type: 'success', offset: 60});
-          router.push('onlineServiceList');
-        }, 1000);
-      }).catch(err => {
-        this.fullscreenLoading = false;
-        ElMessage({message: '部署失败！', type: 'error', offset: 60});
-      });
-    },
-    //镜像部署
-    imageDeployStart(){
-      let middle = {};
-      let env = {};
-      
-      if(this.environment.length > 0){
-        this.environment.forEach(item => {
-          if (item.name && item.name.trim()) {
-            env[item.name.trim()] = item.value;
-          }
-        });
-      }
-      
-      if(this.mode === 'imageSpecific'){
-        middle['service_name'] = this.formOfServiceConfig.serviceName;
-        middle['service_desc'] = this.formOfServiceConfig.serviceDesc;
-        middle['memory'] = this.formOfSourceConfig.memory * 1000000000;
-        middle['cpu_cores_num'] = this.formOfSourceConfig.cpuCoresNum;
-        middle['image_version_id'] = parseInt(this.formOfImageSelection.tagId);
-        middle['env'] = env;
-        middle['image_port'] = parseInt(this.formOfContainerConfig.servicePort);
-        middle['image_name'] = this.formOfImageSelection.imageName;
-        middle['image_tag'] = this.formOfImageSelection.tag;
-        middle['type'] = 'custom';
-      } else {
-        middle['service_name'] = this.formOfServiceConfig.serviceName;
-        middle['service_desc'] = this.formOfServiceConfig.serviceDesc;
-        middle['memory'] = this.formOfSourceConfig.memory * 1000000000;
-        middle['cpu_cores_num'] = this.formOfSourceConfig.cpuCoresNum;
-        middle['image_version_id'] = parseInt(this.formOfImageSelection.tag);
-        middle['env'] = env;
-        middle['image_port'] = parseInt(this.formOfContainerConfig.servicePort);
-        
-        // 找到选中镜像的名称
-        this.imageInRepositoryList.forEach(item => {
-          if(item.image_id === this.formOfImageSelection.imageName){
-            middle['image_name'] = item.image_name;
-            
-            // 找到选中版本的标签
-            item.image_version.forEach(version => {
-              if(version.image_version_id === parseInt(this.formOfImageSelection.tag)){
-                middle['image_tag'] = version.tag;
-              }
-            });
-          }
-        });
-        
-        middle['type'] = 'custom';
-      }
-      
-      console.log(middle, 'middle');
-      this.fullscreenLoading = true;
-      
-      imageDeploy(middle).then(res => {
-        console.log(res.data, 'res.data in imagedeploy');
-        setTimeout(() => {
-          this.fullscreenLoading = false;
-          ElMessage({message: '部署成功！', type: 'success', offset: 60});
-          router.push('onlineServiceList');
-        }, 1000);
-      }).catch(err => {
-        this.fullscreenLoading = false;
-        ElMessage({message: '部署失败！', type: 'error', offset: 60});
-      });
-    },
-    addEnvironment(){
-      this.environment.push({
-        index: this.environment.length,
-        name: "",
-        value: ""
-      });
-    },
-    removeEnvironment(param){
-      this.environment.splice(param, 1);
-      console.log(this.environment, 'this.volumeList');
-    },
-    handleCancel() {
-      router.push('onlineServiceList');
+    if (!serviceErr && !modelErr) {
+      modelDeployStart()
+    } else {
+      ElMessage({ message: '请完善部署信息！', type: 'error', offset: 60 })
+    }
+  } else if (mode.value === 'imageCommon') {
+    //镜像是否选择
+    if (imageSelectRef.value) {
+      await imageSelectRef.value.validate((valid) => {
+        imageErr = !valid
+        console.log("镜像选择验证结果:", valid)
+      })
+    }
+    
+    //容器配置是否填写
+    if (containerConfigRef.value) {
+      await containerConfigRef.value.validate((valid) => {
+        containerErr = !valid
+        console.log("容器配置验证结果:", valid)
+      })
+    }
+
+    if (!serviceErr && !imageErr && !containerErr) {
+      imageDeployStart()
+    } else {
+      ElMessage({ message: '请完善部署信息！', type: 'error', offset: 60 })
+    }
+  } else if (mode.value === 'imageSpecific') {
+    //容器配置是否填写
+    if (containerConfigRef.value) {
+      await containerConfigRef.value.validate((valid) => {
+        containerErr = !valid
+        console.log("容器配置验证结果:", valid)
+      })
+    }
+
+    if (!serviceErr && !containerErr) {
+      imageDeployStart()
+    } else {
+      ElMessage({ message: '请完善部署信息！', type: 'error', offset: 60 })
+    }
+  } else { //modelSpecific的情况，只需要对服务基本信息进行校验
+    if (!serviceErr) {
+      modelDeployStart()
+    } else {
+      ElMessage({ message: '请完善部署信息！', type: 'error', offset: 60 })
     }
   }
 }
+
+//模型部署
+const modelDeployStart = (): void => {
+  const middle: any = {}
+  //针对某一模型部署
+  if (mode.value === 'modelSpecific') {
+    middle['model_id'] = parseInt(formOfModelSelection.modelId!)
+    middle['task_id'] = task_id.value
+    middle['task_history_id'] = task_history_id.value
+    middle['service_name'] = formOfServiceConfig.serviceName
+    middle['service_desc'] = formOfServiceConfig.serviceDesc
+    middle['memory'] = formOfSourceConfig.memory * 1000000000
+    middle['cpu_cores_num'] = formOfSourceConfig.cpuCoresNum
+    middle['type'] = 'official'
+  }
+  //选择模型部署
+  else {
+    modelInRepositoryList.value.forEach(item => {
+      if (item.model_id === parseInt(formOfModelSelection.modelName)) {
+        middle['model_id'] = item.model_id
+        middle['task_id'] = item.task_id
+        middle['task_history_id'] = item.task_history_id
+        middle['service_name'] = formOfServiceConfig.serviceName
+        middle['service_desc'] = formOfServiceConfig.serviceDesc
+        middle['memory'] = formOfSourceConfig.memory * 1000000000
+        middle['cpu_cores_num'] = formOfSourceConfig.cpuCoresNum
+        middle['type'] = 'official'
+      }
+    })
+  }
+  
+  console.log(middle, 'middle')
+  fullscreenLoading.value = true
+  
+  serviceDeploy(middle).then(res => {
+    console.log(res.data, 'res.data in startDeploy')
+    setTimeout(() => {
+      fullscreenLoading.value = false
+      ElMessage({ message: '部署成功！', type: 'success', offset: 60 })
+      router.push('onlineServiceList')
+    }, 1000)
+  }).catch(err => {
+    fullscreenLoading.value = false
+    ElMessage({ message: '部署失败！', type: 'error', offset: 60 })
+  })
+}
+
+//镜像部署
+const imageDeployStart = (): void => {
+  let middle: any = {}
+  let env: any = {}
+  
+  if (environment.value.length > 0) {
+    environment.value.forEach(item => {
+      if (item.name && item.name.trim()) {
+        env[item.name.trim()] = item.value
+      }
+    })
+  }
+  
+  if (mode.value === 'imageSpecific') {
+    middle['service_name'] = formOfServiceConfig.serviceName
+    middle['service_desc'] = formOfServiceConfig.serviceDesc
+    middle['memory'] = formOfSourceConfig.memory * 1000000000
+    middle['cpu_cores_num'] = formOfSourceConfig.cpuCoresNum
+    middle['image_version_id'] = parseInt(formOfImageSelection.tagId!)
+    middle['env'] = env
+    middle['image_port'] = parseInt(formOfContainerConfig.servicePort as string)
+    middle['image_name'] = formOfImageSelection.imageName
+    middle['image_tag'] = formOfImageSelection.tag
+    middle['type'] = 'custom'
+  } else {
+    middle['service_name'] = formOfServiceConfig.serviceName
+    middle['service_desc'] = formOfServiceConfig.serviceDesc
+    middle['memory'] = formOfSourceConfig.memory * 1000000000
+    middle['cpu_cores_num'] = formOfSourceConfig.cpuCoresNum
+    middle['image_version_id'] = parseInt(formOfImageSelection.tag)
+    middle['env'] = env
+    middle['image_port'] = parseInt(formOfContainerConfig.servicePort as string)
+    
+    // 找到选中镜像的名称
+    imageInRepositoryList.value.forEach(item => {
+      if (item.image_id === parseInt(formOfImageSelection.imageName)) {
+        middle['image_name'] = item.image_name
+        
+        // 找到选中版本的标签
+        item.image_version.forEach(version => {
+          if (version.image_version_id === parseInt(formOfImageSelection.tag)) {
+            middle['image_tag'] = version.tag
+          }
+        })
+      }
+    })
+    
+    middle['type'] = 'custom'
+  }
+  
+  console.log(middle, 'middle')
+  fullscreenLoading.value = true
+  
+  imageDeploy(middle).then(res => {
+    console.log(res.data, 'res.data in imagedeploy')
+    setTimeout(() => {
+      fullscreenLoading.value = false
+      ElMessage({ message: '部署成功！', type: 'success', offset: 60 })
+      router.push('onlineServiceList')
+    }, 1000)
+  }).catch(err => {
+    fullscreenLoading.value = false
+    ElMessage({ message: '部署失败！', type: 'error', offset: 60 })
+  })
+}
+
+const addEnvironment = (): void => {
+  environment.value.push({
+    index: environment.value.length,
+    name: "",
+    value: ""
+  })
+}
+
+const removeEnvironment = (param: number): void => {
+  environment.value.splice(param, 1)
+  console.log(environment.value, 'this.volumeList')
+}
+
+const handleCancel = (): void => {
+  router.push('onlineServiceList')
+}
+
+// 组件挂载时执行
+onMounted(() => {
+  checkMode()
+})
 </script>
 
 <style scoped>
